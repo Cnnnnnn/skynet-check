@@ -278,7 +278,7 @@ private final class StoreFakeNetworkMonitor: NetworkMonitoring {
         self.isAvailable = isAvailable
     }
 
-    func start(onChange: @escaping @MainActor @Sendable (Bool) -> Void) {
+    func start(onChange: @escaping @MainActor @Sendable (Bool) -> Void) async {
         startCount += 1
     }
 

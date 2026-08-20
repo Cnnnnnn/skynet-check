@@ -63,7 +63,7 @@ public final class MonitorStore: ObservableObject {
         started = true
 
         await notifier.requestAuthorization()
-        networkMonitor.start { [weak self] available in
+        await networkMonitor.start { [weak self] available in
             self?.handleNetworkChange(available: available)
         }
 
