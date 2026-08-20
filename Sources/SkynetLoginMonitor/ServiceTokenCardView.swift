@@ -58,8 +58,8 @@ private struct TokenRow: View {
                 NSPasteboard.general.setString(token.value, forType: .string)
                 copied = true
             }
-            .buttonStyle(.borderless)
-            .font(.caption)
+            .buttonStyle(.bordered)
+            .controlSize(.small)
         }
     }
 }

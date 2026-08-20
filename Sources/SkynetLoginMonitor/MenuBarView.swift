@@ -100,6 +100,7 @@ struct MenuBarView: View {
                         Task { await store.refresh(notifyResult: true) }
                     } label: {
                         Label("立即检查", systemImage: "arrow.clockwise")
+                            .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
@@ -109,6 +110,7 @@ struct MenuBarView: View {
                         Task { await store.login() }
                     } label: {
                         Label("重新登录", systemImage: "person.crop.circle.badge.arrow.right")
+                            .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
