@@ -12,12 +12,29 @@ struct SkynetLoginMonitorApp: App {
         let runner = ProcessCommandRunner()
         let locator = CLIPathLocator(runner: runner)
         let checker = SkynetAuthChecker(locator: locator, runner: runner)
-        _store = StateObject(
-            wrappedValue: MonitorStore(
+        let notifier = LoginNotifier()
+        let monitorStore = MonitorStore(
+            checker: checker,
+            networkMonitor: NetworkMonitor(),
+            notifier: notifier,
+            environmentDoctor: EnvironmentDoctor(
+                locator: locator,
                 checker: checker,
-                networkMonitor: NetworkMonitor(),
-                notifier: LoginNotifier()
+                runner: runner
             )
+        )
+        notifier.onAction = { [weak monitorStore] action in
+            Task { @MainActor in
+                switch action {
+                case .login:
+                    await monitorStore?.login()
+                case .check:
+                    await monitorStore?.refresh(notifyResult: true)
+                }
+            }
+        }
+        _store = StateObject(
+            wrappedValue: monitorStore
         )
     }
 

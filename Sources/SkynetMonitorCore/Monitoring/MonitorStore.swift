@@ -8,12 +8,17 @@ public final class MonitorStore: ObservableObject {
     @Published public private(set) var cliVersion: String?
     @Published public private(set) var isChecking = false
     @Published public private(set) var pollingIntervalMinutes: Int
+    @Published public private(set) var environmentReport: EnvironmentReport?
+    @Published public private(set) var permissionAudit: SkynetPermissionAudit
+    @Published public private(set) var permissionRepairMessage: String?
 
     private let checker: any SkynetAuthChecking
     private let networkMonitor: any NetworkMonitoring
     private let notifier: any LoginNotifying
     private let periodicChecksEnabled: Bool
     private let pollingInterval: PollingInterval
+    private let environmentDoctor: EnvironmentDoctor?
+    private let permissionManager: SkynetPermissionManager
     private let confirmationDelay: Duration
 
     private var transitionTracker = LoginTransitionTracker()
@@ -29,7 +34,9 @@ public final class MonitorStore: ObservableObject {
         notifier: any LoginNotifying,
         periodicInterval: Duration? = .seconds(15 * 60),
         confirmationDelay: Duration = .seconds(30),
-        pollingInterval: PollingInterval = PollingInterval()
+        pollingInterval: PollingInterval = PollingInterval(),
+        environmentDoctor: EnvironmentDoctor? = nil,
+        permissionManager: SkynetPermissionManager = SkynetPermissionManager()
     ) {
         self.checker = checker
         self.networkMonitor = networkMonitor
@@ -38,6 +45,9 @@ public final class MonitorStore: ObservableObject {
         self.confirmationDelay = confirmationDelay
         self.pollingInterval = pollingInterval
         self.pollingIntervalMinutes = pollingInterval.minutes
+        self.environmentDoctor = environmentDoctor
+        self.permissionManager = permissionManager
+        self.permissionAudit = permissionManager.audit()
     }
 
     public func start() async {
@@ -52,6 +62,7 @@ public final class MonitorStore: ObservableObject {
         }
 
         cliVersion = await checker.version()
+        await inspectEnvironment()
         await refresh()
         startPeriodicChecks()
     }
@@ -130,6 +141,26 @@ public final class MonitorStore: ObservableObject {
         periodicTask?.cancel()
         periodicTask = nil
         startPeriodicChecks()
+    }
+
+    public func inspectEnvironment() async {
+        guard let environmentDoctor else {
+            return
+        }
+        environmentReport = await environmentDoctor.inspect(
+            networkAvailable: networkMonitor.isAvailable
+        )
+        permissionAudit = permissionManager.audit()
+    }
+
+    public func repairPermissions() {
+        do {
+            try permissionManager.repair()
+            permissionAudit = permissionManager.audit()
+            permissionRepairMessage = "权限已修复"
+        } catch {
+            permissionRepairMessage = "权限修复失败"
+        }
     }
 
     private func handleTransition(_ result: LoginState) async {

@@ -31,8 +31,10 @@ public final class LoginNotifier: NSObject, LoginNotifying,
     UNUserNotificationCenterDelegate
 {
     private static let identifier = "skynet-login-expired"
+    private static let actionCategory = "skynet-login-actions"
     private let bundle: Bundle
     private let centerProvider: @MainActor () -> UNUserNotificationCenter
+    public var onAction: (@MainActor (LoginNotificationAction) -> Void)?
 
     public init(
         bundle: Bundle = .main,
@@ -50,6 +52,26 @@ public final class LoginNotifier: NSObject, LoginNotifying,
             return
         }
         let center = configuredCenter()
+        let actions = [
+            UNNotificationAction(
+                identifier: LoginNotificationAction.login.rawValue,
+                title: "重新登录",
+                options: [.foreground]
+            ),
+            UNNotificationAction(
+                identifier: LoginNotificationAction.check.rawValue,
+                title: "立即检查",
+                options: []
+            ),
+        ]
+        center.setNotificationCategories([
+            UNNotificationCategory(
+                identifier: Self.actionCategory,
+                actions: actions,
+                intentIdentifiers: [],
+                options: []
+            ),
+        ])
         _ = try? await center.requestAuthorization(options: [.alert, .sound])
     }
 
@@ -66,6 +88,7 @@ public final class LoginNotifier: NSObject, LoginNotifying,
         content.title = "Skynet 登录已失效"
         content.body = "请重新登录，以免 CLI 任务执行时中断。"
         content.sound = .default
+        content.categoryIdentifier = Self.actionCategory
 
         let request = UNNotificationRequest(
             identifier: Self.identifier,
@@ -86,6 +109,9 @@ public final class LoginNotifier: NSObject, LoginNotifying,
         content.title = notification.title
         content.body = notification.body
         content.sound = .default
+        if state == .unauthenticated {
+            content.categoryIdentifier = Self.actionCategory
+        }
 
         let request = UNNotificationRequest(
             identifier: "skynet-manual-check-\(UUID().uuidString)",
@@ -119,6 +145,20 @@ public final class LoginNotifier: NSObject, LoginNotifying,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
         NotificationPresentationPolicy.foregroundOptions
+    }
+
+    nonisolated public func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        guard let action = LoginNotificationAction(
+            rawValue: response.actionIdentifier
+        ) else {
+            return
+        }
+        await MainActor.run { [weak self] in
+            self?.onAction?(action)
+        }
     }
 
     private var supportsUserNotifications: Bool {
