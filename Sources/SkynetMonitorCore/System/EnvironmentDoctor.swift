@@ -29,6 +29,7 @@ public struct EnvironmentReport: Equatable, Sendable {
     public let networkAvailable: Bool
     public let latestCLIVersion: String?
     public let skynetBaseFound: Bool
+    public let mcpConfiguration: MCPConfiguration?
 
     public init(
         cliPath: String?,
@@ -36,7 +37,8 @@ public struct EnvironmentReport: Equatable, Sendable {
         nodeVersion: String?,
         networkAvailable: Bool,
         latestCLIVersion: String? = nil,
-        skynetBaseFound: Bool = true
+        skynetBaseFound: Bool = true,
+        mcpConfiguration: MCPConfiguration? = nil
     ) {
         self.cliPath = cliPath
         self.cliVersion = cliVersion
@@ -44,10 +46,11 @@ public struct EnvironmentReport: Equatable, Sendable {
         self.networkAvailable = networkAvailable
         self.latestCLIVersion = latestCLIVersion
         self.skynetBaseFound = skynetBaseFound
+        self.mcpConfiguration = mcpConfiguration
     }
 
     public var checks: [EnvironmentCheck] {
-        [
+        var allChecks = [
             EnvironmentCheck(
                 name: "Skynet CLI",
                 status: cliPath == nil ? .failed : .passed,
@@ -76,6 +79,84 @@ public struct EnvironmentReport: Equatable, Sendable {
                     : MonitorText.Environment.skynetBaseMissingDetail
             ),
         ]
+        allChecks.append(contentsOf: mcpChecks)
+        return allChecks
+    }
+
+    // MCP/Skills rows appear only when the probes ran (the CLI exists);
+    // a missing CLI already surfaces through its own row.
+    private var mcpChecks: [EnvironmentCheck] {
+        guard let mcp = mcpConfiguration else {
+            return []
+        }
+
+        var rows: [EnvironmentCheck] = []
+        if let summary = mcp.mcpSummary {
+            if summary.total == 0 {
+                rows.append(
+                    EnvironmentCheck(
+                        name: "MCP",
+                        status: .warning,
+                        detail: MonitorText.Environment.mcpNoneConfigured
+                    )
+                )
+            } else {
+                let missingBase = summary.ideGroups.keys
+                    .filter { !summary.skynetBaseIDEs.contains($0) }
+                    .sorted()
+                if missingBase.isEmpty {
+                    rows.append(
+                        EnvironmentCheck(
+                            name: "MCP",
+                            status: .passed,
+                            detail: MonitorText.Environment.mcpSummary(
+                                total: summary.total,
+                                ideCount: summary.ideGroups.count
+                            )
+                        )
+                    )
+                } else {
+                    rows.append(
+                        EnvironmentCheck(
+                            name: "MCP",
+                            status: .warning,
+                            detail: MonitorText.Environment.mcpMissingCore(
+                                missingBase.joined(separator: "、")
+                            )
+                        )
+                    )
+                }
+            }
+        } else {
+            rows.append(
+                EnvironmentCheck(
+                    name: "MCP",
+                    status: .warning,
+                    detail: MonitorText.Environment.mcpUnableToRead
+                )
+            )
+        }
+
+        if let skillCount = mcp.skillCount {
+            rows.append(
+                EnvironmentCheck(
+                    name: "Skills",
+                    status: skillCount == 0 ? .warning : .passed,
+                    detail: skillCount == 0
+                        ? MonitorText.Environment.skillNoneInstalled
+                        : MonitorText.Environment.skillSummary(skillCount)
+                )
+            )
+        } else {
+            rows.append(
+                EnvironmentCheck(
+                    name: "Skills",
+                    status: .warning,
+                    detail: MonitorText.Environment.skillUnableToRead
+                )
+            )
+        }
+        return rows
     }
 }
 
@@ -83,6 +164,7 @@ public actor EnvironmentDoctor {
     private let locator: any CLIPathLocating
     private let checker: any SkynetAuthChecking
     private let shellResolver: LoginShellResolver
+    private let cliRunner: any CommandRunning
     private let cliVersionChecker: (any CLIVersionChecking)?
 
     public init(
@@ -94,6 +176,7 @@ public actor EnvironmentDoctor {
         self.locator = locator
         self.checker = checker
         self.shellResolver = LoginShellResolver(runner: runner)
+        self.cliRunner = runner
         self.cliVersionChecker = cliVersionChecker
     }
 
@@ -106,8 +189,34 @@ public actor EnvironmentDoctor {
             nodeVersion: nodeVersion,
             networkAvailable: networkAvailable,
             latestCLIVersion: await fetchLatestCLIVersion(),
-            skynetBaseFound: await isSkynetBaseInstalled()
+            skynetBaseFound: await isSkynetBaseInstalled(),
+            mcpConfiguration: await probeMCPConfiguration(cliURL: cliURL)
         )
+    }
+
+    private func probeMCPConfiguration(cliURL: URL?) async -> MCPConfiguration? {
+        guard let cliURL else {
+            return nil
+        }
+        async let mcpOutput = runCLI(cliURL, ["mcp", "list"])
+        async let skillOutput = runCLI(cliURL, ["skill", "list"])
+        return MCPConfiguration(
+            mcpSummary: await mcpOutput.flatMap(MCPOutputParser.parseMCPList),
+            skillCount: await skillOutput.flatMap(MCPOutputParser.parseSkillCount)
+        )
+    }
+
+    private func runCLI(_ cliURL: URL, _ arguments: [String]) async -> String? {
+        let result = await cliRunner.run(
+            executableURL: cliURL,
+            arguments: arguments,
+            environment: CLIExecutionEnvironment.base(for: cliURL),
+            timeout: .seconds(8)
+        )
+        guard !result.timedOut, result.exitCode == 0 else {
+            return nil
+        }
+        return result.stdout
     }
 
     // skynet spawns the skynet-base binary from the user's shell PATH, so

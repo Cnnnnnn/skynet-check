@@ -101,6 +101,19 @@ public enum MonitorText {
         public static let networkUnavailableDetail = "网络不可用"
         public static let skynetBaseFoundDetail = "已安装"
         public static let skynetBaseMissingDetail = "未安装，key 功能不可用"
+        public static let mcpUnableToRead = "无法读取 MCP 配置"
+        public static let mcpNoneConfigured = "未配置任何 MCP"
+        public static func mcpMissingCore(_ ides: String) -> String {
+            "skynet-base MCP 未配置于 \(ides)"
+        }
+        public static func mcpSummary(total: Int, ideCount: Int) -> String {
+            "\(total) 个 · \(ideCount) 个 IDE"
+        }
+        public static let skillUnableToRead = "无法读取 Skills"
+        public static let skillNoneInstalled = "未安装任何 Skill"
+        public static func skillSummary(_ count: Int) -> String {
+            "\(count) 个已安装"
+        }
     }
 
     public enum Permission {

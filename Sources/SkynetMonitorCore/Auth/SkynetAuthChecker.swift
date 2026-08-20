@@ -109,14 +109,9 @@ public actor SkynetAuthChecker: SkynetAuthChecking {
     }
 
     private func environment(for executableURL: URL) -> [String: String] {
-        var environment = baseEnvironment
-        environment["PATH"] = [
-            executableURL.deletingLastPathComponent().path,
-            "/usr/bin",
-            "/bin",
-            "/usr/sbin",
-            "/sbin",
-        ].joined(separator: ":")
-        return environment
+        CLIExecutionEnvironment.base(
+            for: executableURL,
+            base: baseEnvironment
+        )
     }
 }
