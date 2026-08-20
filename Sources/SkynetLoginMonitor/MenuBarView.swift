@@ -51,14 +51,21 @@ struct MenuBarView: View {
                     .lineLimit(1)
             }
 
-            HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
                 if let cliVersion = store.cliVersion {
                     Label("CLI \(cliVersion)", systemImage: "terminal")
                 }
-                if let lastCheckedAt = store.lastCheckedAt {
+                if let lastCheckedAt = store.lastCheckedAt,
+                   let lastCompletedState = store.lastCompletedState {
                     Label(
-                        lastCheckedAt.formatted(date: .omitted, time: .shortened),
+                        "最近：\(lastCompletedState.presentation.title) · \(lastCheckedAt.formatted(date: .omitted, time: .shortened))",
                         systemImage: "clock"
+                    )
+                }
+                if let nextAutomaticCheckAt = store.nextAutomaticCheckAt {
+                    Label(
+                        "下次自动检查：\(nextAutomaticCheckAt.formatted(date: .omitted, time: .shortened))",
+                        systemImage: "timer"
                     )
                 }
             }

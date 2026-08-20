@@ -27,6 +27,46 @@ final class MonitorStoreTests: XCTestCase {
         XCTAssertEqual(checkCount, 1)
     }
 
+    func testStartPublishesNextAutomaticCheckTime() async {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let store = MonitorStore(
+            checker: StoreFakeChecker(results: [.authenticated(email: nil)]),
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: true),
+            notifier: StoreFakeNotifier(),
+            now: { now }
+        )
+
+        await store.start()
+
+        XCTAssertEqual(
+            store.nextAutomaticCheckAt,
+            Date(timeIntervalSince1970: 1_700_000_900)
+        )
+    }
+
+    func testRefreshRetainsLastCompletedResultWhileAnotherCheckIsRunning() async {
+        let store = MonitorStore(
+            checker: StoreFakeChecker(
+                results: [.authenticated(email: "user@example.com"), .offline],
+                delay: .milliseconds(50)
+            ),
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: true),
+            notifier: StoreFakeNotifier(),
+            periodicInterval: nil
+        )
+
+        await store.refresh()
+        let secondRefresh = Task { await store.refresh() }
+        try? await Task.sleep(for: .milliseconds(10))
+
+        XCTAssertEqual(
+            store.lastCompletedState,
+            .authenticated(email: "user@example.com")
+        )
+
+        await secondRefresh.value
+    }
+
     func testOverlappingRefreshesCoalesceIntoOnePendingCheck() async {
         let checker = StoreFakeChecker(
             results: [

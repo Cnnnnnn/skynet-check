@@ -5,6 +5,8 @@ import Foundation
 public final class MonitorStore: ObservableObject {
     @Published public private(set) var state: LoginState = .checking
     @Published public private(set) var lastCheckedAt: Date?
+    @Published public private(set) var lastCompletedState: LoginState?
+    @Published public private(set) var nextAutomaticCheckAt: Date?
     @Published public private(set) var cliVersion: String?
     @Published public private(set) var isChecking = false
     @Published public private(set) var pollingIntervalMinutes: Int
@@ -20,6 +22,7 @@ public final class MonitorStore: ObservableObject {
     private let environmentDoctor: EnvironmentDoctor?
     private let permissionManager: SkynetPermissionManager
     private let confirmationDelay: Duration
+    private let now: @Sendable () -> Date
 
     private var transitionTracker = LoginTransitionTracker()
     private var periodicTask: Task<Void, Never>?
@@ -36,7 +39,8 @@ public final class MonitorStore: ObservableObject {
         confirmationDelay: Duration = .seconds(30),
         pollingInterval: PollingInterval = PollingInterval(),
         environmentDoctor: EnvironmentDoctor? = nil,
-        permissionManager: SkynetPermissionManager = SkynetPermissionManager()
+        permissionManager: SkynetPermissionManager = SkynetPermissionManager(),
+        now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.checker = checker
         self.networkMonitor = networkMonitor
@@ -47,6 +51,7 @@ public final class MonitorStore: ObservableObject {
         self.pollingIntervalMinutes = pollingInterval.minutes
         self.environmentDoctor = environmentDoctor
         self.permissionManager = permissionManager
+        self.now = now
         self.permissionAudit = permissionManager.audit()
     }
 
@@ -85,6 +90,7 @@ public final class MonitorStore: ObservableObject {
             )
 
             state = result
+            lastCompletedState = result
             lastCheckedAt = Date()
             isChecking = false
             await handleTransition(result)
@@ -109,6 +115,7 @@ public final class MonitorStore: ObservableObject {
         )
         let result = loginResult.state
         state = result
+        lastCompletedState = result
         lastCheckedAt = Date()
         isChecking = false
         await handleTransition(result)
@@ -126,6 +133,7 @@ public final class MonitorStore: ObservableObject {
         confirmationTask?.cancel()
         periodicTask = nil
         confirmationTask = nil
+        nextAutomaticCheckAt = nil
         networkMonitor.stop()
         started = false
     }
@@ -203,6 +211,9 @@ public final class MonitorStore: ObservableObject {
             return
         }
         let periodicInterval = Duration.seconds(pollingIntervalMinutes * 60)
+        nextAutomaticCheckAt = now().addingTimeInterval(
+            TimeInterval(pollingIntervalMinutes * 60)
+        )
 
         periodicTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -211,6 +222,9 @@ public final class MonitorStore: ObservableObject {
                     return
                 }
                 await self?.refresh()
+                self?.nextAutomaticCheckAt = self?.now().addingTimeInterval(
+                    TimeInterval(self?.pollingIntervalMinutes ?? 0) * 60
+                )
             }
         }
     }
