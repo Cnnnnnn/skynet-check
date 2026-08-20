@@ -18,6 +18,7 @@ public final class MonitorStore: ObservableObject {
     @Published public private(set) var availableUpdate: AppUpdateManifest?
     @Published public private(set) var sessionExpiresAt: Date?
     @Published public private(set) var serviceTokens: [ServiceToken] = []
+    @Published public private(set) var tokenValidation: [String: ServiceTokenValidationOutcome] = [:]
 
     private let checker: any SkynetAuthChecking
     private let networkMonitor: any NetworkMonitoring
@@ -36,6 +37,7 @@ public final class MonitorStore: ObservableObject {
     private let stateStore: (any LoginStateStoring)?
     private let sessionExpiryStore: (any SessionExpiryStoring)?
     private let serviceTokenReader: (any ServiceTokenReading)?
+    private let tokenValidator: (any ServiceTokenValidating)?
     private var expiryTracker: SessionExpiryTracker
     private var expiryAdvisor = SessionExpiryAdvisor()
     private var periodicTask: Task<Void, Never>?
@@ -58,6 +60,7 @@ public final class MonitorStore: ObservableObject {
         stateStore: (any LoginStateStoring)? = nil,
         sessionExpiryStore: (any SessionExpiryStoring)? = nil,
         serviceTokenReader: (any ServiceTokenReading)? = nil,
+        tokenValidator: (any ServiceTokenValidating)? = nil,
         updateChecker: (any AppUpdateChecking)? = nil,
         currentAppVersion: String? = nil,
         now: @escaping @Sendable () -> Date = Date.init
@@ -75,6 +78,7 @@ public final class MonitorStore: ObservableObject {
         self.stateStore = stateStore
         self.sessionExpiryStore = sessionExpiryStore
         self.serviceTokenReader = serviceTokenReader
+        self.tokenValidator = tokenValidator
         self.expiryTracker = SessionExpiryTracker(
             record: sessionExpiryStore?.load() ?? SessionExpiryRecord()
         )
@@ -219,6 +223,7 @@ public final class MonitorStore: ObservableObject {
             MonitorLog.store.info(
                 "loaded \(tokens.count, privacy: .public) service token(s)"
             )
+            tokenValidation = await validateTokens(tokens)
         }
         guard let environmentDoctor else {
             return
@@ -316,8 +321,37 @@ public final class MonitorStore: ObservableObject {
             pollingIntervalMinutes: pollingIntervalMinutes,
             notificationPermission: notificationPermission,
             permissionAudit: permissionAudit,
-            environment: environmentReport
+            environment: environmentReport,
+            tokenValidation: tokenValidation
         )
+    }
+
+    private func validateTokens(
+        _ tokens: [ServiceToken]
+    ) async -> [String: ServiceTokenValidationOutcome] {
+        guard let tokenValidator else {
+            return [:]
+        }
+
+        // Outcomes carry no token material — only the per-key verdict.
+        return await withTaskGroup(
+            of: (String, ServiceTokenValidationOutcome).self
+        ) { group in
+            for token in tokens where tokenValidator.supportedKeys.contains(token.key) {
+                group.addTask {
+                    let outcome = await tokenValidator.validate(token: token)
+                    MonitorLog.store.info(
+                        "token \(token.key, privacy: .public) validation: \(outcome.logLabel, privacy: .public)"
+                    )
+                    return (token.key, outcome)
+                }
+            }
+            var results: [String: ServiceTokenValidationOutcome] = [:]
+            for await (key, outcome) in group {
+                results[key] = outcome
+            }
+            return results
+        }
     }
 
     private func handleTransition(_ result: LoginState) async {

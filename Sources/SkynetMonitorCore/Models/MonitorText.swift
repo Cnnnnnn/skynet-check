@@ -124,6 +124,12 @@ public enum MonitorText {
         public static let repairFailed = "权限修复失败"
     }
 
+    public enum ServiceToken {
+        public static let validDetail = "有效"
+        public static let invalidDetail = "已失效"
+        public static let unknownDetail = "未检测"
+    }
+
     public enum UpdateCheck {
         public static let upToDate = "已是最新版本"
         public static let failed = "检查更新失败"

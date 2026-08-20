@@ -15,6 +15,7 @@ public enum DiagnosticsComposer {
         notificationPermission: NotificationPermissionStatus,
         permissionAudit: SkynetPermissionAudit?,
         environment: EnvironmentReport?,
+        tokenValidation: [String: ServiceTokenValidationOutcome] = [:],
         now: Date = Date()
     ) -> String {
         var lines: [String] = []
@@ -46,6 +47,9 @@ public enum DiagnosticsComposer {
             for check in environment.checks {
                 lines.append("- \(check.name)：\(check.detail)")
             }
+        }
+        for (key, outcome) in tokenValidation.sorted(by: { $0.key < $1.key }) {
+            lines.append("- Token \(key)：\(outcome.panelDetail)")
         }
         return lines.joined(separator: "\n")
     }
