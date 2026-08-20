@@ -3,7 +3,7 @@
 All notable changes to this project are documented in this file. Versions
 follow the newest `v*` git tag; the build number is the commit count.
 
-## [Unreleased]
+## [0.3.0] - 2026-08-21
 
 ### Added
 
