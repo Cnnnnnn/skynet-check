@@ -4,4 +4,5 @@ public enum CLIInstallGuide {
         "npm install @shopee/skynet-cli -g --registry https://npm.shopee.io"
     public static let combinedCommand =
         "\(nodeCommand) && \(skynetCommand)"
+    public static let updateCommand = "skynet update"
 }

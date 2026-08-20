@@ -19,4 +19,8 @@ final class CLIInstallGuideTests: XCTestCase {
             "brew install node && npm install @shopee/skynet-cli -g --registry https://npm.shopee.io"
         )
     }
+
+    func testUsesCLIUpdateCommand() {
+        XCTAssertEqual(CLIInstallGuide.updateCommand, "skynet update")
+    }
 }

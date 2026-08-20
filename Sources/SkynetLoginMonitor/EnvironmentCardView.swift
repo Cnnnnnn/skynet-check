@@ -61,17 +61,29 @@ struct EnvironmentCardView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            Button(upgradeCommandCopied ? "升级命令已复制" : "复制升级命令") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(
-                    CLIInstallGuide.skynetCommand,
-                    forType: .string
-                )
-                upgradeCommandCopied = true
+            HStack(spacing: 8) {
+                Button("用 Terminal 升级") {
+                    copyToPasteboard(CLIInstallGuide.updateCommand)
+                    NSWorkspace.shared.open(
+                        URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")
+                    )
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+
+                Button(upgradeCommandCopied ? "命令已复制" : "复制 npm 命令") {
+                    copyToPasteboard(CLIInstallGuide.skynetCommand)
+                    upgradeCommandCopied = true
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
             }
-            .buttonStyle(.borderless)
-            .font(.caption)
         }
+    }
+
+    private func copyToPasteboard(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     private func checkRow(_ check: EnvironmentCheck) -> some View {
