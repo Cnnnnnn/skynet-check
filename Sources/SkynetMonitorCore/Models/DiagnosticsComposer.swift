@@ -16,6 +16,8 @@ public enum DiagnosticsComposer {
         permissionAudit: SkynetPermissionAudit?,
         environment: EnvironmentReport?,
         tokenValidation: [String: ServiceTokenValidationOutcome] = [:],
+        checkDurations: CheckDurationStats = CheckDurationStats(),
+        skynetConfig: SkynetConfigSummary? = nil,
         now: Date = Date()
     ) -> String {
         var lines: [String] = []
@@ -47,6 +49,29 @@ public enum DiagnosticsComposer {
             for check in environment.checks {
                 lines.append("- \(check.name)：\(check.detail)")
             }
+        }
+        if let skynetConfig {
+            var fields: [String] = []
+            if let mode = skynetConfig.mode {
+                fields.append("mode=\(mode)")
+            }
+            if let role = skynetConfig.role {
+                fields.append("role=\(role)")
+            }
+            if let language = skynetConfig.language {
+                fields.append("language=\(language)")
+            }
+            if !fields.isEmpty {
+                lines.append("Skynet 配置：\(fields.joined(separator: " "))")
+            }
+        }
+        if let last = checkDurations.last {
+            let average = checkDurations.average.map {
+                " · 平均 \(DurationPresentation.summarizeSeconds($0))"
+            } ?? ""
+            lines.append(
+                "检查耗时：最近 \(DurationPresentation.summarizeSeconds(last))\(average)"
+            )
         }
         for (key, outcome) in tokenValidation.sorted(by: { $0.key < $1.key }) {
             lines.append("- Token \(key)：\(outcome.panelDetail)")

@@ -39,6 +39,50 @@ final class DiagnosticsComposerTests: XCTestCase {
         XCTAssertTrue(report.contains("- Node.js：v22.23.2"))
     }
 
+    func testIncludesConfigSummaryAndCheckDurations() {
+        var durations = CheckDurationStats()
+        durations.record(0.8)
+        durations.record(1.2)
+
+        let report = DiagnosticsComposer.compose(
+            appVersion: "0.6.0",
+            state: nil,
+            lastCheckedAt: nil,
+            lastCompletedState: nil,
+            sessionExpiresAt: nil,
+            pollingIntervalMinutes: 15,
+            notificationPermission: .authorized,
+            permissionAudit: nil,
+            environment: nil,
+            checkDurations: durations,
+            skynetConfig: SkynetConfigSummary(
+                mode: "codex_app",
+                role: "FE",
+                language: "zh"
+            )
+        )
+
+        XCTAssertTrue(report.contains("Skynet 配置：mode=codex_app role=FE language=zh"))
+        XCTAssertTrue(report.contains("检查耗时：最近 1.2s · 平均 1.0s"))
+    }
+
+    func testOmitsEmptyConfigAndDurations() {
+        let report = DiagnosticsComposer.compose(
+            appVersion: nil,
+            state: nil,
+            lastCheckedAt: nil,
+            lastCompletedState: nil,
+            sessionExpiresAt: nil,
+            pollingIntervalMinutes: 15,
+            notificationPermission: .authorized,
+            permissionAudit: nil,
+            environment: nil
+        )
+
+        XCTAssertFalse(report.contains("Skynet 配置"))
+        XCTAssertFalse(report.contains("检查耗时"))
+    }
+
     func testOmitsServiceErrorDetail() {
         let report = DiagnosticsComposer.compose(
             appVersion: "0.3.0",

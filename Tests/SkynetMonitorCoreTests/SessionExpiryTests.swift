@@ -169,4 +169,39 @@ final class SessionExpiryTests: XCTestCase {
         XCTAssertEqual(DurationPresentation.summarize(45 * 60), "45 分钟")
         XCTAssertEqual(DurationPresentation.summarize(90 * 60), "1.5 小时")
     }
+
+    func testDurationStatsCapEntriesAndAverage() {
+        var stats = CheckDurationStats()
+        for index in 0..<15 {
+            stats.record(TimeInterval(index))
+        }
+
+        XCTAssertEqual(stats.recent.count, CheckDurationStats.maxEntries)
+        XCTAssertEqual(stats.last, 14)
+        XCTAssertEqual(stats.average ?? 0, 9.5, accuracy: 0.001)
+        XCTAssertNil(CheckDurationStats().average)
+    }
+
+    func testConfigReaderParsesNonSensitiveFields() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("config-\(UUID().uuidString).json")
+        let json = #"{"language":"zh","role":"FE","mode":"codex_app","userInfo":{"email":"x@y.z"}}"#
+        try Data(json.utf8).write(to: url)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: url)
+        }
+
+        let summary = SkynetConfigReader(configURL: url).read()
+
+        XCTAssertEqual(
+            summary,
+            SkynetConfigSummary(mode: "codex_app", role: "FE", language: "zh")
+        )
+        XCTAssertNil(
+            SkynetConfigReader(
+                configURL: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("missing-\(UUID().uuidString).json")
+            ).read()
+        )
+    }
 }
