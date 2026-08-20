@@ -26,6 +26,7 @@ public final class MonitorStore: ObservableObject {
     private let now: @Sendable () -> Date
 
     private var transitionTracker = LoginTransitionTracker()
+    private let stateStore: (any LoginStateStoring)?
     private var periodicTask: Task<Void, Never>?
     private var confirmationTask: Task<Void, Never>?
     private var refreshPending = false
@@ -41,6 +42,7 @@ public final class MonitorStore: ObservableObject {
         pollingInterval: PollingInterval = PollingInterval(),
         environmentDoctor: EnvironmentDoctor? = nil,
         permissionManager: SkynetPermissionManager = SkynetPermissionManager(),
+        stateStore: (any LoginStateStoring)? = nil,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.checker = checker
@@ -52,8 +54,18 @@ public final class MonitorStore: ObservableObject {
         self.pollingIntervalMinutes = pollingInterval.minutes
         self.environmentDoctor = environmentDoctor
         self.permissionManager = permissionManager
+        self.stateStore = stateStore
         self.now = now
         self.permissionAudit = permissionManager.audit()
+
+        // Show the last known outcome immediately on launch; the first
+        // refresh in start() replaces it with a fresh result.
+        if let snapshot = stateStore?.load() {
+            state = snapshot.state
+            lastCompletedState = snapshot.state
+            lastCheckedAt = snapshot.completedAt
+            MonitorLog.store.info("restored last completed check from snapshot")
+        }
     }
 
     public func start() async {
@@ -71,6 +83,7 @@ public final class MonitorStore: ObservableObject {
         await inspectEnvironment()
         await refresh()
         startPeriodicChecks()
+        MonitorLog.store.info("monitor started")
     }
 
     public func refresh(notifyResult: Bool = false) async {
@@ -90,10 +103,10 @@ public final class MonitorStore: ObservableObject {
                 networkAvailable: networkMonitor.isAvailable
             )
 
-            state = result
-            lastCompletedState = result
-            lastCheckedAt = Date()
-            isChecking = false
+            complete(with: result)
+            MonitorLog.store.info(
+                "check completed: \(result.presentation.title, privacy: .public)"
+            )
             await handleTransition(result)
             if notifyCurrentResult {
                 await notifier.notifyCheckResult(result)
@@ -115,15 +128,16 @@ public final class MonitorStore: ObservableObject {
             networkAvailable: networkMonitor.isAvailable
         )
         let result = loginResult.state
-        state = result
-        lastCompletedState = result
-        lastCheckedAt = Date()
-        isChecking = false
+        complete(with: result)
+        MonitorLog.store.info(
+            "login flow completed: \(result.presentation.title, privacy: .public)"
+        )
         await handleTransition(result)
         await notifier.notifyLoginResult(loginResult)
     }
 
     public func handleWake() {
+        MonitorLog.store.info("system woke; scheduling refresh")
         Task { [weak self] in
             await self?.refresh()
         }
@@ -137,12 +151,16 @@ public final class MonitorStore: ObservableObject {
         nextAutomaticCheckAt = nil
         networkMonitor.stop()
         started = false
+        MonitorLog.store.info("monitor stopped")
     }
 
     public func setPollingInterval(_ minutes: Int) {
         let clamped = PollingInterval.clamped(minutes)
         pollingInterval.setMinutes(clamped)
         pollingIntervalMinutes = clamped
+        MonitorLog.store.info(
+            "polling interval set to \(clamped, privacy: .public) minutes"
+        )
 
         guard started, periodicChecksEnabled else {
             return
@@ -173,6 +191,20 @@ public final class MonitorStore: ObservableObject {
         }
     }
 
+    private func complete(with result: LoginState) {
+        let completedAt = now()
+        state = result
+        lastCompletedState = result
+        lastCheckedAt = completedAt
+        isChecking = false
+        stateStore?.save(
+            LoginStateSnapshot(
+                state: result.persistenceSafe,
+                completedAt: completedAt
+            )
+        )
+    }
+
     private func handleTransition(_ result: LoginState) async {
         switch transitionTracker.consume(result) {
         case .none:
@@ -194,11 +226,15 @@ public final class MonitorStore: ObservableObject {
 
         case .notifyExpired:
             confirmationTask = nil
+            MonitorLog.store.notice("login expiry confirmed; notifying user")
             await notifier.notifyLoginExpired()
         }
     }
 
     private func handleNetworkChange(available: Bool) {
+        MonitorLog.store.info(
+            "network became \(available ? "available" : "unavailable", privacy: .public)"
+        )
         if available {
             Task { [weak self] in
                 await self?.refresh()

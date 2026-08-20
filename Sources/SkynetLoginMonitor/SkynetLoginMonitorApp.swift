@@ -21,7 +21,8 @@ struct SkynetLoginMonitorApp: App {
                 locator: locator,
                 checker: checker,
                 runner: runner
-            )
+            ),
+            stateStore: LoginStateStore()
         )
         notifier.onAction = { [weak monitorStore] action in
             Task { @MainActor in

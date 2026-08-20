@@ -184,6 +184,68 @@ final class MonitorStoreTests: XCTestCase {
         XCTAssertEqual(store.notificationPermission, .denied)
     }
 
+    func testRestoresLastCompletedSnapshotOnInit() {
+        let completedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let stateStore = StoreFakeStateStore()
+        stateStore.snapshot = LoginStateSnapshot(
+            state: .authenticated(email: "user@example.com"),
+            completedAt: completedAt
+        )
+        let store = MonitorStore(
+            checker: StoreFakeChecker(results: []),
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: true),
+            notifier: StoreFakeNotifier(),
+            periodicInterval: nil,
+            stateStore: stateStore
+        )
+
+        XCTAssertEqual(store.state, .authenticated(email: "user@example.com"))
+        XCTAssertEqual(store.lastCompletedState, .authenticated(email: "user@example.com"))
+        XCTAssertEqual(store.lastCheckedAt, completedAt)
+    }
+
+    func testRefreshPersistsCompletedState() async {
+        let stateStore = StoreFakeStateStore()
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let store = MonitorStore(
+            checker: StoreFakeChecker(results: [.unauthenticated]),
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: true),
+            notifier: StoreFakeNotifier(),
+            periodicInterval: nil,
+            stateStore: stateStore,
+            now: { now }
+        )
+
+        await store.refresh()
+
+        XCTAssertEqual(stateStore.saved?.state, .unauthenticated)
+        XCTAssertEqual(stateStore.saved?.completedAt, now)
+    }
+
+    func testPersistsServiceErrorWithoutCLIDetail() async {
+        let stateStore = StoreFakeStateStore()
+        let store = MonitorStore(
+            checker: StoreFakeChecker(
+                results: [.serviceError(message: "Error: secret registry url")]
+            ),
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: true),
+            notifier: StoreFakeNotifier(),
+            periodicInterval: nil,
+            stateStore: stateStore
+        )
+
+        await store.refresh()
+
+        XCTAssertEqual(
+            stateStore.saved?.state,
+            .serviceError(message: "Skynet CLI reported an error")
+        )
+        XCTAssertEqual(
+            store.lastCompletedState,
+            .serviceError(message: "Error: secret registry url")
+        )
+    }
+
     func testLoginNotifiesWhenSessionIsAlreadyAuthenticated() async {
         let notifier = StoreFakeNotifier()
         let store = MonitorStore(
@@ -232,6 +294,19 @@ final class MonitorStoreTests: XCTestCase {
         while !condition(), clock.now < deadline {
             await Task.yield()
         }
+    }
+}
+
+private final class StoreFakeStateStore: LoginStateStoring, @unchecked Sendable {
+    var snapshot: LoginStateSnapshot?
+    private(set) var saved: LoginStateSnapshot?
+
+    func load() -> LoginStateSnapshot? {
+        snapshot
+    }
+
+    func save(_ snapshot: LoginStateSnapshot) {
+        saved = snapshot
     }
 }
 

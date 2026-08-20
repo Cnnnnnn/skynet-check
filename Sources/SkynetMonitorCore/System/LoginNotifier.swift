@@ -23,6 +23,19 @@ public enum NotificationPermissionStatus: Equatable, Sendable {
     case notDetermined
     case denied
     case unsupported
+
+    var logLabel: String {
+        switch self {
+        case .authorized:
+            "authorized"
+        case .notDetermined:
+            "notDetermined"
+        case .denied:
+            "denied"
+        case .unsupported:
+            "unsupported"
+        }
+    }
 }
 
 enum NotificationPermissionMapper {
@@ -97,7 +110,18 @@ public final class LoginNotifier: NSObject, LoginNotifying,
                 options: []
             ),
         ])
-        _ = try? await center.requestAuthorization(options: [.alert, .sound])
+        do {
+            let granted = try await center.requestAuthorization(
+                options: [.alert, .sound]
+            )
+            MonitorLog.notifier.info(
+                "notification authorization granted=\(granted, privacy: .public)"
+            )
+        } catch {
+            MonitorLog.notifier.error(
+                "notification authorization failed: \(error.localizedDescription, privacy: .public)"
+            )
+        }
     }
 
     public func authorizationStatus() async -> NotificationPermissionStatus {
@@ -105,9 +129,13 @@ public final class LoginNotifier: NSObject, LoginNotifying,
             return .unsupported
         }
         let settings = await configuredCenter().notificationSettings()
-        return NotificationPermissionMapper.status(
+        let status = NotificationPermissionMapper.status(
             from: settings.authorizationStatus
         )
+        MonitorLog.notifier.info(
+            "notification authorization status: \(status.logLabel, privacy: .public)"
+        )
+        return status
     }
 
     public func notifyLoginExpired() async {
@@ -125,12 +153,14 @@ public final class LoginNotifier: NSObject, LoginNotifying,
         content.sound = .default
         content.categoryIdentifier = Self.actionCategory
 
-        let request = UNNotificationRequest(
-            identifier: Self.identifier,
-            content: content,
-            trigger: nil
+        await post(
+            UNNotificationRequest(
+                identifier: Self.identifier,
+                content: content,
+                trigger: nil
+            ),
+            label: "login-expired"
         )
-        try? await center.add(request)
     }
 
     public func notifyCheckResult(_ state: LoginState) async {
@@ -139,7 +169,6 @@ public final class LoginNotifier: NSObject, LoginNotifying,
         else {
             return
         }
-        let center = configuredCenter()
         let content = UNMutableNotificationContent()
         content.title = notification.title
         content.body = notification.body
@@ -148,31 +177,51 @@ public final class LoginNotifier: NSObject, LoginNotifying,
             content.categoryIdentifier = Self.actionCategory
         }
 
-        let request = UNNotificationRequest(
-            identifier: "skynet-manual-check-\(UUID().uuidString)",
-            content: content,
-            trigger: nil
+        await post(
+            UNNotificationRequest(
+                identifier: "skynet-manual-check-\(UUID().uuidString)",
+                content: content,
+                trigger: nil
+            ),
+            label: "manual-check"
         )
-        try? await center.add(request)
     }
 
     public func notifyLoginResult(_ result: LoginActionResult) async {
         guard supportsUserNotifications else {
             return
         }
-        let center = configuredCenter()
         let notification = result.notification
         let content = UNMutableNotificationContent()
         content.title = notification.title
         content.body = notification.body
         content.sound = .default
 
-        let request = UNNotificationRequest(
-            identifier: "skynet-login-action-\(UUID().uuidString)",
-            content: content,
-            trigger: nil
+        await post(
+            UNNotificationRequest(
+                identifier: "skynet-login-action-\(UUID().uuidString)",
+                content: content,
+                trigger: nil
+            ),
+            label: "login-action"
         )
-        try? await center.add(request)
+    }
+
+    private func post(
+        _ request: UNNotificationRequest,
+        label: String
+    ) async {
+        let center = centerProvider()
+        do {
+            try await center.add(request)
+            MonitorLog.notifier.info(
+                "posted \(label, privacy: .public) notification"
+            )
+        } catch {
+            MonitorLog.notifier.error(
+                "failed to post \(label, privacy: .public) notification: \(error.localizedDescription, privacy: .public)"
+            )
+        }
     }
 
     nonisolated public func userNotificationCenter(
