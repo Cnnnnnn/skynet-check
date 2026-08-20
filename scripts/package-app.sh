@@ -9,6 +9,7 @@ APP_BUNDLE="$BUILD_ROOT/Skynet Login Monitor.app"
 CONTENTS_DIR="$APP_BUNDLE/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 INFO_PLIST="$REPO_ROOT/Packaging/Info.plist"
+SIGNING_IDENTITY="\${SKYNET_SIGNING_IDENTITY:--}"
 
 case "$APP_BUNDLE" in
     "$REPO_ROOT"/build/*.app) ;;
@@ -40,7 +41,7 @@ fi
 /bin/cp "$INFO_PLIST" "$CONTENTS_DIR/Info.plist"
 
 /usr/bin/plutil -lint "$CONTENTS_DIR/Info.plist"
-/usr/bin/codesign --force --deep --sign - "$APP_BUNDLE"
+/usr/bin/codesign --force --deep --sign "$SIGNING_IDENTITY" "$APP_BUNDLE"
 /usr/bin/codesign --verify --deep --strict "$APP_BUNDLE"
 
 echo "Packaged: $APP_BUNDLE"

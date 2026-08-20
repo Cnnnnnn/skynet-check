@@ -20,6 +20,13 @@ open "build/Skynet Login Monitor.app"
 
 The packaged app is ad-hoc signed for local use. It has no Dock icon.
 
+For team distribution, run scripts/package-team-release.sh after importing a
+Developer ID Application certificate and creating a notarytool keychain
+profile. The script requires SKYNET_SIGNING_IDENTITY and
+SKYNET_NOTARY_PROFILE; it signs, notarizes, staples, and verifies the DMG.
+Never put certificate files, Apple credentials, or notarization profiles in
+the repository.
+
 ## Install locally
 
 ```bash
@@ -65,6 +72,17 @@ when the CLI is missing.
 The panel also exposes the automatic-check interval as a slider from 3 to 60
 minutes. The default is 15 minutes; changes are persisted locally and restart
 the timer immediately.
+
+## Team support matrix
+
+- macOS 13 or newer
+- Apple Silicon and Intel
+- Node.js installed through Homebrew or another supported installation
+- Skynet CLI installed with the team registry command shown in the missing-CLI guide
+- Network access to the internal NPM registry during CLI installation
+
+The app has no shared account or team token. Each user keeps their own Skynet
+CLI session and notification permission.
 
 ## Uninstall
 

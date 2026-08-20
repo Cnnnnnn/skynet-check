@@ -21,7 +21,11 @@ final class CLIPathLocatorTests: XCTestCase {
         let executable = try makeExecutable()
         let suiteName = makeSuiteName()
         let runner = FakeCommandRunner(result: .success(stdout: executable.path + "\n"))
-        let locator = CLIPathLocator(runner: runner, defaultsSuiteName: suiteName)
+        let locator = CLIPathLocator(
+            runner: runner,
+            defaultsSuiteName: suiteName,
+            candidatePaths: []
+        )
 
         let url = try await locator.locate()
         let capturedInvocation = await runner.lastInvocation
@@ -40,7 +44,8 @@ final class CLIPathLocatorTests: XCTestCase {
         let suiteName = makeSuiteName()
         let locator = CLIPathLocator(
             runner: FakeCommandRunner(result: .success(stdout: "")),
-            defaultsSuiteName: suiteName
+            defaultsSuiteName: suiteName,
+            candidatePaths: []
         )
 
         do {
@@ -49,6 +54,22 @@ final class CLIPathLocatorTests: XCTestCase {
         } catch {
             XCTAssertEqual(error as? CLIPathError, .notFound)
         }
+    }
+
+    func testUsesACommonCandidatePathBeforeLaunchingShell() async throws {
+        let executable = try makeExecutable()
+        let runner = FakeCommandRunner(result: .success(stdout: "/not/used"))
+        let locator = CLIPathLocator(
+            runner: runner,
+            defaultsSuiteName: makeSuiteName(),
+            candidatePaths: [executable]
+        )
+
+        let url = try await locator.locate()
+        let callCount = await runner.callCount
+
+        XCTAssertEqual(url, executable)
+        XCTAssertEqual(callCount, 0)
     }
 
     private func makeSuiteName() -> String {
