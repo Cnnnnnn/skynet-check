@@ -27,12 +27,14 @@ public final class MonitorStore: ObservableObject {
     private let updateChecker: (any AppUpdateChecking)?
     private let currentAppVersion: String?
     private let confirmationDelay: Duration
+    private let wakeDelay: Duration
     private let now: @Sendable () -> Date
 
     private var transitionTracker = LoginTransitionTracker()
     private let stateStore: (any LoginStateStoring)?
     private var periodicTask: Task<Void, Never>?
     private var confirmationTask: Task<Void, Never>?
+    private var wakeTask: Task<Void, Never>?
     private var refreshPending = false
     private var pendingResultNotification = false
     private var started = false
@@ -43,6 +45,7 @@ public final class MonitorStore: ObservableObject {
         notifier: any LoginNotifying,
         periodicInterval: Duration? = .seconds(15 * 60),
         confirmationDelay: Duration = .seconds(30),
+        wakeDelay: Duration = .seconds(3),
         pollingInterval: PollingInterval = PollingInterval(),
         environmentDoctor: EnvironmentDoctor? = nil,
         permissionManager: SkynetPermissionManager = SkynetPermissionManager(),
@@ -56,6 +59,7 @@ public final class MonitorStore: ObservableObject {
         self.notifier = notifier
         self.periodicChecksEnabled = periodicInterval != nil
         self.confirmationDelay = confirmationDelay
+        self.wakeDelay = wakeDelay
         self.pollingInterval = pollingInterval
         self.pollingIntervalMinutes = pollingInterval.minutes
         self.environmentDoctor = environmentDoctor
@@ -146,7 +150,16 @@ public final class MonitorStore: ObservableObject {
 
     public func handleWake() {
         MonitorLog.store.info("system woke; scheduling refresh")
-        Task { [weak self] in
+        // Networking (Wi-Fi reassociation, VPN) needs a moment after wake;
+        // checking immediately misreports "offline" until the path settles.
+        // Repeated wake notifications coalesce into a single deferred check.
+        wakeTask?.cancel()
+        let delay = wakeDelay
+        wakeTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else {
+                return
+            }
             await self?.refresh()
         }
     }
@@ -154,8 +167,10 @@ public final class MonitorStore: ObservableObject {
     public func stop() {
         periodicTask?.cancel()
         confirmationTask?.cancel()
+        wakeTask?.cancel()
         periodicTask = nil
         confirmationTask = nil
+        wakeTask = nil
         nextAutomaticCheckAt = nil
         networkMonitor.stop()
         started = false

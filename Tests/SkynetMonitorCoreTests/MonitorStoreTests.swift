@@ -266,6 +266,41 @@ final class MonitorStoreTests: XCTestCase {
         XCTAssertEqual(notifier.notificationCount, 1)
     }
 
+    func testWakeDefersRefreshUntilNetworkSettles() async {
+        let checker = StoreFakeChecker(results: [.authenticated(email: nil)])
+        let store = MonitorStore(
+            checker: checker,
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: true),
+            notifier: StoreFakeNotifier(),
+            periodicInterval: nil,
+            wakeDelay: .seconds(30)
+        )
+
+        store.handleWake()
+        try? await Task.sleep(for: .milliseconds(100))
+        let checkCount = await checker.checkCount
+
+        XCTAssertEqual(checkCount, 0)
+    }
+
+    func testWakeRefreshesAfterDelay() async {
+        let checker = StoreFakeChecker(results: [.authenticated(email: nil)])
+        let store = MonitorStore(
+            checker: checker,
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: true),
+            notifier: StoreFakeNotifier(),
+            periodicInterval: nil,
+            wakeDelay: .zero
+        )
+
+        store.handleWake()
+        await waitUntil { store.lastCheckedAt != nil }
+        let checkCount = await checker.checkCount
+
+        XCTAssertEqual(checkCount, 1)
+        XCTAssertEqual(store.state, .authenticated(email: nil))
+    }
+
     func testCheckForUpdatesReportsNewerRelease() async {
         let store = MonitorStore(
             checker: StoreFakeChecker(results: []),

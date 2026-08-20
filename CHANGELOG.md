@@ -13,6 +13,9 @@ follow the newest `v*` git tag; the build number is the commit count.
 
 ### Changed
 
+- Wake-triggered checks wait a few seconds (default 3) for networking to
+  settle instead of immediately misreporting "offline"; repeated wake
+  notifications coalesce into one deferred check.
 - Menu panel split into focused card views; environment diagnostics is
   collapsed by default behind a disclosure group.
 - User-facing text centralized in `MonitorText`.
