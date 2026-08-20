@@ -64,7 +64,7 @@ public struct EnvironmentReport: Equatable, Sendable {
 public actor EnvironmentDoctor {
     private let locator: any CLIPathLocating
     private let checker: any SkynetAuthChecking
-    private let runner: any CommandRunning
+    private let shellResolver: LoginShellResolver
 
     public init(
         locator: any CLIPathLocating,
@@ -73,7 +73,7 @@ public actor EnvironmentDoctor {
     ) {
         self.locator = locator
         self.checker = checker
-        self.runner = runner
+        self.shellResolver = LoginShellResolver(runner: runner)
     }
 
     public func inspect(networkAvailable: Bool) async -> EnvironmentReport {
@@ -88,16 +88,12 @@ public actor EnvironmentDoctor {
     }
 
     private func discoverNodeVersion() async -> String? {
-        let result = await runner.run(
-            executableURL: URL(fileURLWithPath: "/bin/zsh"),
-            arguments: ["-l", "-i", "-c", "node --version"],
-            environment: ProcessInfo.processInfo.environment,
-            timeout: .seconds(5)
-        )
-        guard result.exitCode == 0, !result.timedOut else {
+        guard
+            let output = await shellResolver.resolve(command: "node --version")
+        else {
             return nil
         }
-        let version = result.stdout
+        let version = output
             .split(whereSeparator: { $0 == "\n" || $0 == "\r" })
             .last
             .map(String.init)?

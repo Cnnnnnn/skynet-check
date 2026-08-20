@@ -72,6 +72,50 @@ final class AuthOutputParserTests: XCTestCase {
         )
     }
 
+    func testSurfacesFirstStderrLineWhenCLIReturnsError() {
+        XCTAssertEqual(
+            AuthOutputParser.parse(
+                AuthOutput(
+                    stdout: "",
+                    stderr: "Error: cannot resolve registry host\nsecond line",
+                    exitCode: 1,
+                    timedOut: false
+                )
+            ),
+            .serviceError(message: "Error: cannot resolve registry host")
+        )
+    }
+
+    func testKeepsFallbackWhenStderrIsEmpty() {
+        XCTAssertEqual(
+            AuthOutputParser.parse(
+                AuthOutput(
+                    stdout: "",
+                    stderr: "  \n",
+                    exitCode: 1,
+                    timedOut: false
+                )
+            ),
+            .serviceError(message: "Skynet CLI exited with an error")
+        )
+    }
+
+    func testCapsStderrDetailLength() {
+        let longLine = String(repeating: "x", count: 300)
+
+        XCTAssertEqual(
+            AuthOutputParser.parse(
+                AuthOutput(
+                    stdout: "",
+                    stderr: longLine,
+                    exitCode: 1,
+                    timedOut: false
+                )
+            ),
+            .serviceError(message: String(repeating: "x", count: 120))
+        )
+    }
+
     func testClassifiesTimeoutBeforeOutput() {
         XCTAssertEqual(
             AuthOutputParser.parse(

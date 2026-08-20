@@ -74,7 +74,7 @@ final class CLIPathLocatorTests: XCTestCase {
         )
         let invocation = try XCTUnwrap(capturedInvocation)
         XCTAssertEqual(invocation.executableURL.path, "/bin/zsh")
-        XCTAssertEqual(invocation.arguments, ["-l", "-i", "-c", "command -v skynet"])
+        XCTAssertEqual(invocation.arguments, ["-l", "-c", "command -v skynet"])
     }
 
     func testThrowsNotFoundForMissingShellResult() async {

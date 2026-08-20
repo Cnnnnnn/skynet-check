@@ -11,7 +11,7 @@ public protocol CLIPathLocating: Sendable {
 public actor CLIPathLocator: CLIPathLocating {
     private static let cacheKey = "resolvedSkynetCLIPath"
 
-    private let runner: any CommandRunning
+    private let shellResolver: LoginShellResolver
     private let defaults: UserDefaults
     private let fileManager = FileManager.default
     private let candidatePaths: [URL]
@@ -21,7 +21,7 @@ public actor CLIPathLocator: CLIPathLocating {
         defaultsSuiteName: String? = nil,
         candidatePaths: [URL]? = nil
     ) {
-        self.runner = runner
+        self.shellResolver = LoginShellResolver(runner: runner)
         self.defaults = defaultsSuiteName.flatMap(UserDefaults.init(suiteName:)) ?? .standard
         self.candidatePaths = candidatePaths ?? Self.defaultCandidatePaths()
     }
@@ -32,6 +32,7 @@ public actor CLIPathLocator: CLIPathLocating {
         // newer CLI that appeared at a candidate path.
         for candidate in candidatePaths {
             if let candidateURL = executableURL(for: candidate.path) {
+                MonitorLog.cli.info("resolved skynet via candidate path")
                 defaults.set(candidateURL.path, forKey: Self.cacheKey)
                 return candidateURL
             }
@@ -40,25 +41,23 @@ public actor CLIPathLocator: CLIPathLocating {
         if let cachedPath = defaults.string(forKey: Self.cacheKey),
            let cachedURL = executableURL(for: cachedPath)
         {
+            MonitorLog.cli.info("resolved skynet via cached path")
             return cachedURL
         }
 
-        let result = await runner.run(
-            executableURL: URL(fileURLWithPath: "/bin/zsh"),
-            arguments: ["-l", "-i", "-c", "command -v skynet"],
-            environment: ProcessInfo.processInfo.environment,
-            timeout: .seconds(5)
-        )
-
-        guard !result.timedOut,
-              result.exitCode == 0,
-              let discoveredURL = executableURL(
-                for: result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-              )
+        guard
+            let output = await shellResolver.resolve(command: "command -v skynet"),
+            let firstLine = output
+                .components(separatedBy: .newlines)
+                .map({ $0.trimmingCharacters(in: .whitespaces) })
+                .first(where: { !$0.isEmpty }),
+            let discoveredURL = executableURL(for: firstLine)
         else {
+            MonitorLog.cli.error("skynet CLI not found in candidates, cache, or login shell")
             throw CLIPathError.notFound
         }
 
+        MonitorLog.cli.info("resolved skynet via login shell")
         defaults.set(discoveredURL.path, forKey: Self.cacheKey)
         return discoveredURL
     }

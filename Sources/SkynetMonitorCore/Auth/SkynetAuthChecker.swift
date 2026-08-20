@@ -37,14 +37,7 @@ public actor SkynetAuthChecker: SkynetAuthChecking {
             return .offline
         }
 
-        let state = AuthOutputParser.parse(
-            AuthOutput(
-                stdout: result.stdout,
-                stderr: result.stderr,
-                exitCode: result.exitCode,
-                timedOut: result.timedOut
-            )
-        )
+        let state = AuthOutputParser.parse(AuthOutput(result))
 
         if !networkAvailable,
            case .serviceError = state
@@ -82,7 +75,12 @@ public actor SkynetAuthChecker: SkynetAuthChecking {
         }
         guard !result.timedOut, result.exitCode == 0 else {
             return .completed(
-                .serviceError(message: "Skynet login failed")
+                .serviceError(
+                    message: AuthOutputParser.errorDetail(
+                        for: AuthOutput(result),
+                        fallback: "Skynet login failed"
+                    )
+                )
             )
         }
 

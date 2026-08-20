@@ -27,10 +27,34 @@ public enum AuthOutputParser {
         }
 
         if output.exitCode != 0 {
-            return .serviceError(message: "Skynet CLI exited with an error")
+            return .serviceError(
+                message: errorDetail(
+                    for: output,
+                    fallback: "Skynet CLI exited with an error"
+                )
+            )
         }
 
-        return .serviceError(message: "Unrecognized Skynet CLI response")
+        return .serviceError(
+            message: errorDetail(
+                for: output,
+                fallback: "Unrecognized Skynet CLI response"
+            )
+        )
+    }
+
+    // Only the first stderr line is surfaced, capped in length, and kept in
+    // memory for the panel; it never reaches logs or persisted snapshots.
+    static func errorDetail(for output: AuthOutput, fallback: String) -> String {
+        guard
+            let line = output.stderr
+                .components(separatedBy: .newlines)
+                .map({ $0.trimmingCharacters(in: .whitespaces) })
+                .first(where: { !$0.isEmpty })
+        else {
+            return fallback
+        }
+        return String(line.prefix(120))
     }
 
     private static func value(in lines: [String], labels: [String]) -> String? {

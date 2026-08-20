@@ -102,11 +102,22 @@ private final class ProcessExecution: @unchecked Sendable {
         process.waitUntilExit()
         watchdog.cancel()
 
+        let outputData = await stdoutReader.value
+        let errorData = await stderrReader.value
+        let timedOut = lock.withLock { didTimeOut }
+
+        // Log metadata only: command output may contain account details.
+        let commandName = process.executableURL?.lastPathComponent ?? "process"
+        let exitCode = process.terminationStatus
+        MonitorLog.runner.info(
+            "command \(commandName, privacy: .public) exit=\(exitCode) timedOut=\(timedOut) stdoutBytes=\(outputData.count) stderrBytes=\(errorData.count)"
+        )
+
         return CommandResult(
-            stdout: String(decoding: await stdoutReader.value, as: UTF8.self),
-            stderr: String(decoding: await stderrReader.value, as: UTF8.self),
+            stdout: String(decoding: outputData, as: UTF8.self),
+            stderr: String(decoding: errorData, as: UTF8.self),
             exitCode: process.terminationStatus,
-            timedOut: lock.withLock { didTimeOut }
+            timedOut: timedOut
         )
     }
 
