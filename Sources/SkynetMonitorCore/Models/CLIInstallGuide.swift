@@ -5,4 +5,5 @@ public enum CLIInstallGuide {
     public static let combinedCommand =
         "\(nodeCommand) && \(skynetCommand)"
     public static let updateCommand = "skynet update"
+    public static let skillSyncCommand = "skynet skill install"
 }

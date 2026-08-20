@@ -114,6 +114,9 @@ public enum MonitorText {
         public static func skillSummary(_ count: Int) -> String {
             "\(count) 个已安装"
         }
+        public static func skillOutdated(total: Int, outdated: Int) -> String {
+            "\(total) 个已安装，\(outdated) 个落后于基线"
+        }
     }
 
     public enum Permission {

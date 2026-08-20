@@ -48,6 +48,95 @@ final class MCPOutputParserTests: XCTestCase {
         XCTAssertNil(MCPOutputParser.parseSkillCount("nope"))
     }
 
+    func testParsesInstalledSkillsFromJSON() {
+        let json = #"""
+            [
+              {"name": "a2ui", "version": "v2"},
+              {"name": "ask-matt", "version": ""}
+            ]
+            """#
+
+        let installed = SkillInventoryParser.parseInstalledSkills(
+            fromJSON: Data(json.utf8)
+        )
+
+        XCTAssertEqual(
+            installed,
+            [
+                InstalledSkill(name: "a2ui", version: "v2"),
+                InstalledSkill(name: "ask-matt", version: ""),
+            ]
+        )
+        XCTAssertNil(
+            SkillInventoryParser.parseInstalledSkills(fromJSON: Data("not json".utf8))
+        )
+    }
+
+    func testParsesLockBaselineFromJSON() {
+        let json = #"""
+            {"fe-api-gen": {"version": "v10"}, "skill-jira": {"version": "v6"}}
+            """#
+
+        let baseline = SkillInventoryParser.parseLockBaseline(
+            fromJSON: Data(json.utf8)
+        )
+
+        XCTAssertEqual(
+            baseline,
+            ["fe-api-gen": "v10", "skill-jira": "v6"]
+        )
+        XCTAssertNil(
+            SkillInventoryParser.parseLockBaseline(fromJSON: Data("[]".utf8))
+        )
+    }
+
+    func testEvaluatorFlagsOutdatedMissingAndUnknownSkills() {
+        let outdated = SkillUpdateEvaluator.outdatedSkills(
+            installed: [
+                InstalledSkill(name: "current-skill", version: "v10"),
+                InstalledSkill(name: "older-skill", version: "v9"),
+                InstalledSkill(name: "no-version-skill", version: ""),
+            ],
+            baseline: [
+                "current-skill": "v10",
+                "older-skill": "v11",
+                "missing-skill": "v3",
+                "no-version-skill": "v2",
+                "unparsable-skill": "beta",
+            ]
+        )
+
+        XCTAssertEqual(
+            outdated,
+            [
+                OutdatedSkill(name: "missing-skill", installedVersion: nil, expectedVersion: "v3"),
+                OutdatedSkill(name: "no-version-skill", installedVersion: nil, expectedVersion: "v2"),
+                OutdatedSkill(name: "older-skill", installedVersion: "v9", expectedVersion: "v11"),
+            ]
+        )
+    }
+
+    func testSkillRowWarnsWhenOutdatedAgainstBaseline() {
+        let report = EnvironmentReport(
+            cliPath: "/fake/bin/skynet",
+            cliVersion: "2.7.29",
+            nodeVersion: "v22.23.2",
+            networkAvailable: true,
+            mcpConfiguration: MCPConfiguration(
+                mcpSummary: nil,
+                skillCount: 167,
+                outdatedSkills: [
+                    OutdatedSkill(name: "older-skill", installedVersion: "v9", expectedVersion: "v11"),
+                ]
+            )
+        )
+
+        let skillRow = report.checks.first { $0.name == "Skills" }
+
+        XCTAssertEqual(skillRow?.status, .warning)
+        XCTAssertEqual(skillRow?.detail, "167 个已安装，1 个落后于基线")
+    }
+
     func testMCPRowsReportMissingCoreMCPAsWarning() {
         let report = EnvironmentReport(
             cliPath: "/fake/bin/skynet",
@@ -103,17 +192,21 @@ final class MCPOutputParserTests: XCTestCase {
         XCTAssertEqual(mcpRow?.detail, "4 个 · 2 个 IDE")
     }
 
-    func testDoctorProbesMCPConfigurationThroughTheCLI() async {
+    func testDoctorProbesMCPConfigurationThroughTheCLI() async throws {
+        let lockURL = try writeTemporaryLock(
+            baseline: ["fe-api-gen": "v10", "fe-td-generator": "v11"]
+        )
         let runner = DoctorProbingRunner(results: [
             .succeeded(stdout: "v22.23.2\n"),               // node --version
             .succeeded(stdout: "/opt/homebrew/bin/skynet-base\n"), // skynet-base
             .succeeded(stdout: mcpListOutput + "\n"),       // mcp list
-            .succeeded(stdout: "✅ 12 个已安装的 Skill\n"),  // skill list
+            .succeeded(stdout: skillListJSON),              // skill list --json
         ])
         let doctor = EnvironmentDoctor(
             locator: DoctorStubLocator(url: URL(fileURLWithPath: "/fake/bin/skynet")),
             checker: DoctorStubChecker(version: "2.7.29"),
-            runner: runner
+            runner: runner,
+            skillLockURL: lockURL
         )
 
         let report = await doctor.inspect(networkAvailable: true)
@@ -122,7 +215,39 @@ final class MCPOutputParserTests: XCTestCase {
             report.mcpConfiguration?.mcpSummary?.skynetBaseIDEs,
             ["Cursor"]
         )
-        XCTAssertEqual(report.mcpConfiguration?.skillCount, 12)
+        XCTAssertEqual(report.mcpConfiguration?.skillCount, 3)
+        XCTAssertEqual(
+            report.mcpConfiguration?.outdatedSkills,
+            [
+                OutdatedSkill(name: "fe-td-generator", installedVersion: nil, expectedVersion: "v11"),
+            ]
+        )
+    }
+
+    private var skillListJSON: String {
+        #"""
+        [
+          {"name": "fe-api-gen", "version": "v10"},
+          {"name": "older-skill", "version": "v9"},
+          {"name": "a2ui", "version": "v2"}
+        ]
+        """#
+    }
+
+    private func writeTemporaryLock(baseline: [String: String]) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("skill-lock-\(UUID().uuidString).json")
+        let payload = Dictionary(
+            uniqueKeysWithValues: baseline.map { name, version in
+                (name, ["version": version])
+            }
+        )
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        try data.write(to: url)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: url)
+        }
+        return url
     }
 }
 

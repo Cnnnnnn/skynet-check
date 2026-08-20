@@ -138,12 +138,16 @@ public struct EnvironmentReport: Equatable, Sendable {
         }
 
         if let skillCount = mcp.skillCount {
+            let outdatedCount = mcp.outdatedSkills?.count ?? 0
             rows.append(
                 EnvironmentCheck(
                     name: "Skills",
-                    status: skillCount == 0 ? .warning : .passed,
-                    detail: skillCount == 0
-                        ? MonitorText.Environment.skillNoneInstalled
+                    status: (skillCount == 0 || outdatedCount > 0) ? .warning : .passed,
+                    detail: outdatedCount > 0
+                        ? MonitorText.Environment.skillOutdated(
+                            total: skillCount,
+                            outdated: outdatedCount
+                        )
                         : MonitorText.Environment.skillSummary(skillCount)
                 )
             )
@@ -166,18 +170,23 @@ public actor EnvironmentDoctor {
     private let shellResolver: LoginShellResolver
     private let cliRunner: any CommandRunning
     private let cliVersionChecker: (any CLIVersionChecking)?
+    private let skillLockURL: URL?
+    private let fileManager = FileManager.default
 
     public init(
         locator: any CLIPathLocating,
         checker: any SkynetAuthChecking,
         runner: any CommandRunning,
-        cliVersionChecker: (any CLIVersionChecking)? = nil
+        cliVersionChecker: (any CLIVersionChecking)? = nil,
+        skillLockURL: URL? = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".agents/skills/skynet-skills-lock.json")
     ) {
         self.locator = locator
         self.checker = checker
         self.shellResolver = LoginShellResolver(runner: runner)
         self.cliRunner = runner
         self.cliVersionChecker = cliVersionChecker
+        self.skillLockURL = skillLockURL
     }
 
     public func inspect(networkAvailable: Bool) async -> EnvironmentReport {
@@ -199,10 +208,44 @@ public actor EnvironmentDoctor {
             return nil
         }
         async let mcpOutput = runCLI(cliURL, ["mcp", "list"])
-        async let skillOutput = runCLI(cliURL, ["skill", "list"])
+        async let skillOutput = runCLI(cliURL, ["skill", "list", "--json"])
+
+        let installedSkills = await skillOutput?
+            .data(using: .utf8)
+            .flatMap(SkillInventoryParser.parseInstalledSkills)
+        let baseline = loadSkillBaseline()
+
         return MCPConfiguration(
             mcpSummary: await mcpOutput.flatMap(MCPOutputParser.parseMCPList),
-            skillCount: await skillOutput.flatMap(MCPOutputParser.parseSkillCount)
+            skillCount: installedSkills?.count,
+            outdatedSkills: evaluateOutdatedSkills(
+                installed: installedSkills,
+                baseline: baseline
+            )
+        )
+    }
+
+    private func loadSkillBaseline() -> [String: String]? {
+        guard let skillLockURL,
+              let data = try? Data(contentsOf: skillLockURL)
+        else {
+            return nil
+        }
+        return SkillInventoryParser.parseLockBaseline(fromJSON: data)
+    }
+
+    // Outdated detection needs both sides; either one missing leaves the
+    // question open (nil) instead of claiming everything is current.
+    private func evaluateOutdatedSkills(
+        installed: [InstalledSkill]?,
+        baseline: [String: String]?
+    ) -> [OutdatedSkill]? {
+        guard let installed, let baseline else {
+            return nil
+        }
+        return SkillUpdateEvaluator.outdatedSkills(
+            installed: installed,
+            baseline: baseline
         )
     }
 

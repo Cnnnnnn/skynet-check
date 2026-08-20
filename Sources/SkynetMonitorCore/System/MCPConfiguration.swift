@@ -16,13 +16,41 @@ public struct MCPListSummary: Equatable, Sendable {
     }
 }
 
+public struct InstalledSkill: Equatable, Sendable {
+    public let name: String
+    public let version: String
+
+    public init(name: String, version: String) {
+        self.name = name
+        self.version = version
+    }
+}
+
+public struct OutdatedSkill: Equatable, Sendable {
+    public let name: String
+    public let installedVersion: String?
+    public let expectedVersion: String
+
+    public init(name: String, installedVersion: String?, expectedVersion: String) {
+        self.name = name
+        self.installedVersion = installedVersion
+        self.expectedVersion = expectedVersion
+    }
+}
+
 public struct MCPConfiguration: Equatable, Sendable {
     public let mcpSummary: MCPListSummary?
     public let skillCount: Int?
+    public let outdatedSkills: [OutdatedSkill]?
 
-    public init(mcpSummary: MCPListSummary?, skillCount: Int?) {
+    public init(
+        mcpSummary: MCPListSummary?,
+        skillCount: Int?,
+        outdatedSkills: [OutdatedSkill]? = nil
+    ) {
         self.mcpSummary = mcpSummary
         self.skillCount = skillCount
+        self.outdatedSkills = outdatedSkills
     }
 }
 
@@ -71,6 +99,70 @@ public enum MCPOutputParser {
             return nil
         }
         return Int(match.1)
+    }
+}
+
+public enum SkillInventoryParser {
+    public static func parseInstalledSkills(fromJSON data: Data) -> [InstalledSkill]? {
+        struct Entry: Decodable {
+            let name: String
+            let version: String?
+        }
+
+        guard let entries = try? JSONDecoder().decode([Entry].self, from: data) else {
+            return nil
+        }
+        return entries.map { InstalledSkill(name: $0.name, version: $0.version ?? "") }
+    }
+
+    public static func parseLockBaseline(fromJSON data: Data) -> [String: String]? {
+        struct Entry: Decodable {
+            let version: String?
+        }
+
+        guard let entries = try? JSONDecoder().decode([String: Entry].self, from: data) else {
+            return nil
+        }
+        var baseline: [String: String] = [:]
+        for (name, entry) in entries {
+            baseline[name] = entry.version ?? ""
+        }
+        return baseline
+    }
+}
+
+public enum SkillUpdateEvaluator {
+    // A skill is outdated when the team lock baseline expects a newer
+    // numeric version than what is installed; a baseline entry missing from
+    // the installed list counts as outdated, an unparsable expected version
+    // is ignored.
+    public static func outdatedSkills(
+        installed: [InstalledSkill],
+        baseline: [String: String]
+    ) -> [OutdatedSkill] {
+        let installedVersions = Dictionary(
+            installed.map { ($0.name, $0.version) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        return baseline
+            .compactMap { name, expected -> OutdatedSkill? in
+                guard let expectedVersion = SemanticVersion(expected) else {
+                    return nil
+                }
+                let installedRaw = installedVersions[name] ?? ""
+                if let installedVersion = SemanticVersion(installedRaw),
+                   installedVersion >= expectedVersion
+                {
+                    return nil
+                }
+                return OutdatedSkill(
+                    name: name,
+                    installedVersion: installedRaw.isEmpty ? nil : installedRaw,
+                    expectedVersion: expected
+                )
+            }
+            .sorted { $0.name < $1.name }
     }
 }
 
