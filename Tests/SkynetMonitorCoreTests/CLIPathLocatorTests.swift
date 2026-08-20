@@ -8,13 +8,50 @@ final class CLIPathLocatorTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.set("/bin/echo", forKey: "resolvedSkynetCLIPath")
         let runner = FakeCommandRunner(result: .success(stdout: "/not/used"))
-        let locator = CLIPathLocator(runner: runner, defaultsSuiteName: suiteName)
+        let locator = CLIPathLocator(
+            runner: runner,
+            defaultsSuiteName: suiteName,
+            candidatePaths: []
+        )
 
         let url = try await locator.locate()
         let callCount = await runner.callCount
 
         XCTAssertEqual(url.path, "/bin/echo")
         XCTAssertEqual(callCount, 0)
+    }
+
+    func testPrefersLiveCandidateOverStaleCacheEntry() async throws {
+        let cached = try makeExecutable()
+        let live = try makeExecutable()
+        let suiteName = makeSuiteName()
+        UserDefaults(suiteName: suiteName)!.set(
+            cached.path,
+            forKey: "resolvedSkynetCLIPath"
+        )
+        let runner = FakeCommandRunner(result: .success(stdout: "/not/used"))
+        let locator = CLIPathLocator(
+            runner: runner,
+            defaultsSuiteName: suiteName,
+            candidatePaths: [live]
+        )
+
+        let url = try await locator.locate()
+        let callCount = await runner.callCount
+
+        XCTAssertEqual(url, live)
+        XCTAssertEqual(callCount, 0)
+        XCTAssertEqual(
+            UserDefaults(suiteName: suiteName)?.string(forKey: "resolvedSkynetCLIPath"),
+            live.path
+        )
+    }
+
+    func testRanksNodeVersionsNumerically() {
+        XCTAssertTrue(CLIPathLocator.isNewerVersion("v10.0.0", "v9.11.0"))
+        XCTAssertTrue(CLIPathLocator.isNewerVersion("v20.11.0", "v20.9.0"))
+        XCTAssertFalse(CLIPathLocator.isNewerVersion("v18.20.0", "v20.0.0"))
+        XCTAssertFalse(CLIPathLocator.isNewerVersion("v20.0.0", "v20.0.0"))
     }
 
     func testDiscoversAndCachesExecutableFromLoginShell() async throws {

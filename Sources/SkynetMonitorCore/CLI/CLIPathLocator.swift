@@ -27,17 +27,20 @@ public actor CLIPathLocator: CLIPathLocating {
     }
 
     public func locate() async throws -> URL {
-        if let cachedPath = defaults.string(forKey: Self.cacheKey),
-           let cachedURL = executableURL(for: cachedPath)
-        {
-            return cachedURL
-        }
-
+        // Probe well-known install locations on every call: a stale cache
+        // entry (e.g. an older nvm-managed version) must not shadow a
+        // newer CLI that appeared at a candidate path.
         for candidate in candidatePaths {
             if let candidateURL = executableURL(for: candidate.path) {
                 defaults.set(candidateURL.path, forKey: Self.cacheKey)
                 return candidateURL
             }
+        }
+
+        if let cachedPath = defaults.string(forKey: Self.cacheKey),
+           let cachedURL = executableURL(for: cachedPath)
+        {
+            return cachedURL
         }
 
         let result = await runner.run(
@@ -88,11 +91,32 @@ public actor CLIPathLocator: CLIPathLocating {
         ) {
             candidates.append(
                 contentsOf: versions
-                    .sorted { $0.path > $1.path }
+                    .sorted {
+                        isNewerVersion(
+                            $0.lastPathComponent,
+                            $1.lastPathComponent
+                        )
+                    }
                     .map { $0.appendingPathComponent("bin/skynet") }
             )
         }
 
         return candidates
+    }
+
+    // Lexicographic ordering would rank "v9.x" above "v10.x"; the numeric
+    // segments must be compared as integers to pick the newest node first.
+    static func isNewerVersion(_ lhs: String, _ rhs: String) -> Bool {
+        let lhsComponents = versionComponents(lhs)
+        let rhsComponents = versionComponents(rhs)
+        for (lhsPart, rhsPart) in zip(lhsComponents, rhsComponents)
+        where lhsPart != rhsPart {
+            return lhsPart > rhsPart
+        }
+        return lhsComponents.count > rhsComponents.count
+    }
+
+    private static func versionComponents(_ name: String) -> [Int] {
+        name.split { !$0.isNumber }.map { Int($0) ?? 0 }
     }
 }
