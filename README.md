@@ -43,6 +43,10 @@ scripts/install-local.sh --fix-permissions
 
 The app checks on launch, every 15 minutes, after wake, and after network recovery. A login-expired notification requires two unauthenticated checks 30 seconds apart and is sent once for that failure episode.
 
+If Skynet CLI is missing, the menu shows the documented Node.js and Skynet
+installation commands, lets the user copy them, opens Terminal, and provides a
+重新检测 action. The app never installs global dependencies silently.
+
 ## Menu actions
 
 - **立即检查** runs an immediate status check and sends a macOS notification

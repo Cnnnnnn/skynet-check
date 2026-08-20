@@ -9,6 +9,7 @@ struct MenuBarView: View {
 
     @State private var launchAtLoginEnabled: Bool
     @State private var launchAtLoginMessage: String?
+    @State private var installCommandCopied = false
 
     init(
         store: MonitorStore,
@@ -40,19 +41,51 @@ struct MenuBarView: View {
 
         Divider()
 
-        Button("立即检查") {
-            Task {
-                await store.refresh(notifyResult: true)
+        if store.state == .cliMissing {
+            Text("需要先安装 Skynet CLI")
+            Text("命令已复制后，可粘贴到 Terminal 执行")
+            Button("复制安装命令") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(
+                    CLIInstallGuide.combinedCommand,
+                    forType: .string
+                )
+                installCommandCopied = true
             }
-        }
-        .disabled(store.isChecking)
+            Button("打开 Terminal") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(
+                    CLIInstallGuide.combinedCommand,
+                    forType: .string
+                )
+                NSWorkspace.shared.open(
+                    URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")
+                )
+            }
+            if installCommandCopied {
+                Text("安装命令已复制")
+            }
+            Button("重新检测") {
+                Task {
+                    await store.refresh()
+                }
+            }
+            .disabled(store.isChecking)
+        } else {
+            Button("立即检查") {
+                Task {
+                    await store.refresh(notifyResult: true)
+                }
+            }
+            .disabled(store.isChecking)
 
-        Button("重新登录") {
-            Task {
-                await store.login()
+            Button("重新登录") {
+                Task {
+                    await store.login()
+                }
             }
+            .disabled(store.isChecking)
         }
-        .disabled(store.isChecking || store.state == .cliMissing)
 
         Toggle(
             "开机启动",
