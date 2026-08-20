@@ -169,6 +169,21 @@ final class MonitorStoreTests: XCTestCase {
         XCTAssertEqual(settings.minutes, 60)
     }
 
+    func testInspectEnvironmentPublishesNotificationPermission() async {
+        let notifier = StoreFakeNotifier()
+        notifier.permissionStatus = .denied
+        let store = MonitorStore(
+            checker: StoreFakeChecker(results: [.authenticated(email: nil)]),
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: true),
+            notifier: notifier,
+            periodicInterval: nil
+        )
+
+        await store.inspectEnvironment()
+
+        XCTAssertEqual(store.notificationPermission, .denied)
+    }
+
     func testLoginNotifiesWhenSessionIsAlreadyAuthenticated() async {
         let notifier = StoreFakeNotifier()
         let store = MonitorStore(
@@ -272,6 +287,7 @@ private final class StoreFakeNetworkMonitor: NetworkMonitoring {
 
 @MainActor
 private final class StoreFakeNotifier: LoginNotifying {
+    var permissionStatus: NotificationPermissionStatus = .authorized
     private(set) var authorizationRequestCount = 0
     private(set) var notificationCount = 0
     private(set) var manualCheckResults: [LoginState] = []
@@ -279,6 +295,10 @@ private final class StoreFakeNotifier: LoginNotifying {
 
     func requestAuthorization() async {
         authorizationRequestCount += 1
+    }
+
+    func authorizationStatus() async -> NotificationPermissionStatus {
+        permissionStatus
     }
 
     func notifyLoginExpired() async {

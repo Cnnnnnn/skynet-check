@@ -89,7 +89,7 @@ final class SkynetAuthCheckerTests: XCTestCase {
             invocations.map(\.arguments),
             [["auth", "status"], ["auth", "login"], ["auth", "status"]]
         )
-        XCTAssertEqual(invocations[1].timeout, .seconds(60))
+        XCTAssertEqual(invocations[1].timeout, .seconds(300))
     }
 
     func testReadsTrimmedCLIVersion() async {

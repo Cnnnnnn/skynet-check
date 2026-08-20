@@ -43,12 +43,14 @@ public struct ProcessCommandRunner: CommandRunning {
                 arguments: arguments,
                 environment: environment
             )
-            return execution.run(timeout: timeout)
+            return await execution.run(timeout: timeout)
         }.value
     }
 }
 
 private final class ProcessExecution: @unchecked Sendable {
+    private static let killGracePeriod: Duration = .seconds(2)
+
     private let process = Process()
     private let standardOutput = Pipe()
     private let standardError = Pipe()
@@ -67,7 +69,7 @@ private final class ProcessExecution: @unchecked Sendable {
         process.standardError = standardError
     }
 
-    func run(timeout: Duration) -> CommandResult {
+    func run(timeout: Duration) async -> CommandResult {
         do {
             try process.run()
         } catch {
@@ -79,31 +81,61 @@ private final class ProcessExecution: @unchecked Sendable {
             )
         }
 
+        // Both pipes must be drained while the child runs: a child that
+        // fills the pipe buffer blocks on write and never exits, which
+        // would deadlock waitUntilExit below.
+        let stdoutReader = Task.detached(priority: .utility) {
+            self.readToEnd(self.standardOutput.fileHandleForReading)
+        }
+        let stderrReader = Task.detached(priority: .utility) {
+            self.readToEnd(self.standardError.fileHandleForReading)
+        }
+
         let watchdog = Task {
             try? await Task.sleep(for: timeout)
             guard !Task.isCancelled else {
                 return
             }
-            lock.withLock {
-                guard process.isRunning else {
-                    return
-                }
-                didTimeOut = true
-                process.terminate()
-            }
+            await self.terminateStalledProcess()
         }
 
         process.waitUntilExit()
         watchdog.cancel()
 
-        let outputData = standardOutput.fileHandleForReading.readDataToEndOfFile()
-        let errorData = standardError.fileHandleForReading.readDataToEndOfFile()
-
         return CommandResult(
-            stdout: String(decoding: outputData, as: UTF8.self),
-            stderr: String(decoding: errorData, as: UTF8.self),
+            stdout: String(decoding: await stdoutReader.value, as: UTF8.self),
+            stderr: String(decoding: await stderrReader.value, as: UTF8.self),
             exitCode: process.terminationStatus,
             timedOut: lock.withLock { didTimeOut }
         )
+    }
+
+    private func readToEnd(_ handle: FileHandle) -> Data {
+        handle.readDataToEndOfFile()
+    }
+
+    private func terminateStalledProcess() async {
+        let didTerminate = lock.withLock { () -> Bool in
+            guard process.isRunning else {
+                return false
+            }
+            didTimeOut = true
+            process.terminate()
+            return true
+        }
+        guard didTerminate else {
+            return
+        }
+
+        try? await Task.sleep(for: Self.killGracePeriod)
+        guard !Task.isCancelled else {
+            return
+        }
+        lock.withLock {
+            guard process.isRunning else {
+                return
+            }
+            kill(process.processIdentifier, SIGKILL)
+        }
     }
 }

@@ -68,11 +68,13 @@ public actor SkynetAuthChecker: SkynetAuthChecking {
             return .completed(.cliMissing)
         }
 
+        // The login flow opens a browser and waits for the user to finish
+        // authenticating, which routinely takes longer than a minute.
         let result = await runner.run(
             executableURL: executableURL,
             arguments: ["auth", "login"],
             environment: environment(for: executableURL),
-            timeout: .seconds(60)
+            timeout: .seconds(300)
         )
 
         if !networkAvailable && (result.timedOut || result.exitCode != 0) {

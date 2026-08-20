@@ -11,6 +11,7 @@ public final class MonitorStore: ObservableObject {
     @Published public private(set) var isChecking = false
     @Published public private(set) var pollingIntervalMinutes: Int
     @Published public private(set) var environmentReport: EnvironmentReport?
+    @Published public private(set) var notificationPermission: NotificationPermissionStatus = .unsupported
     @Published public private(set) var permissionAudit: SkynetPermissionAudit
     @Published public private(set) var permissionRepairMessage: String?
 
@@ -152,6 +153,7 @@ public final class MonitorStore: ObservableObject {
     }
 
     public func inspectEnvironment() async {
+        notificationPermission = await notifier.authorizationStatus()
         guard let environmentDoctor else {
             return
         }

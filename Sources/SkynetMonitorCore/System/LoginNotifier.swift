@@ -18,9 +18,34 @@ enum NotificationPresentationPolicy {
     ]
 }
 
+public enum NotificationPermissionStatus: Equatable, Sendable {
+    case authorized
+    case notDetermined
+    case denied
+    case unsupported
+}
+
+enum NotificationPermissionMapper {
+    static func status(
+        from authorizationStatus: UNAuthorizationStatus
+    ) -> NotificationPermissionStatus {
+        switch authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            return .authorized
+        case .denied:
+            return .denied
+        case .notDetermined:
+            return .notDetermined
+        @unknown default:
+            return .notDetermined
+        }
+    }
+}
+
 @MainActor
 public protocol LoginNotifying: AnyObject {
     func requestAuthorization() async
+    func authorizationStatus() async -> NotificationPermissionStatus
     func notifyLoginExpired() async
     func notifyCheckResult(_ state: LoginState) async
     func notifyLoginResult(_ result: LoginActionResult) async
@@ -73,6 +98,16 @@ public final class LoginNotifier: NSObject, LoginNotifying,
             ),
         ])
         _ = try? await center.requestAuthorization(options: [.alert, .sound])
+    }
+
+    public func authorizationStatus() async -> NotificationPermissionStatus {
+        guard supportsUserNotifications else {
+            return .unsupported
+        }
+        let settings = await configuredCenter().notificationSettings()
+        return NotificationPermissionMapper.status(
+            from: settings.authorizationStatus
+        )
     }
 
     public func notifyLoginExpired() async {

@@ -1,3 +1,4 @@
+import UserNotifications
 import XCTest
 @testable import SkynetMonitorCore
 
@@ -20,6 +21,25 @@ final class NotificationEnvironmentTests: XCTestCase {
                 bundleURL: URL(fileURLWithPath: "/tmp/Skynet Login Monitor.app"),
                 bundleIdentifier: "io.skynet.login-monitor"
             )
+        )
+    }
+
+    func testMapsAuthorizationStatusesToPermissionStates() {
+        XCTAssertEqual(
+            NotificationPermissionMapper.status(from: .authorized),
+            .authorized
+        )
+        XCTAssertEqual(
+            NotificationPermissionMapper.status(from: .provisional),
+            .authorized
+        )
+        XCTAssertEqual(
+            NotificationPermissionMapper.status(from: .denied),
+            .denied
+        )
+        XCTAssertEqual(
+            NotificationPermissionMapper.status(from: .notDetermined),
+            .notDetermined
         )
     }
 }

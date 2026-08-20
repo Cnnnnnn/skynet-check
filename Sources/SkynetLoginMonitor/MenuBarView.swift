@@ -268,6 +268,30 @@ struct MenuBarView: View {
                         .lineLimit(1)
                 }
             }
+            if store.notificationPermission != .unsupported {
+                HStack(spacing: 6) {
+                    Image(systemName: store.notificationPermission.symbolName)
+                        .foregroundStyle(store.notificationPermission.color)
+                    Text("通知权限")
+                        .font(.caption)
+                    Spacer()
+                    Text(store.notificationPermission.detail)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                if store.notificationPermission == .denied {
+                    Button("打开系统设置开启通知") {
+                        if let url = URL(
+                            string: "x-apple.systempreferences:com.apple.Notifications-Settings"
+                        ) {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                }
+            }
         }
         .padding(10)
         .background(Color.blue.opacity(0.08))
@@ -349,6 +373,47 @@ private extension EnvironmentCheckStatus {
             .orange
         case .failed:
             .red
+        }
+    }
+}
+
+private extension NotificationPermissionStatus {
+    var symbolName: String {
+        switch self {
+        case .authorized:
+            "checkmark.circle.fill"
+        case .notDetermined:
+            "exclamationmark.triangle.fill"
+        case .denied:
+            "xmark.circle.fill"
+        case .unsupported:
+            "minus.circle"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .authorized:
+            .green
+        case .notDetermined:
+            .orange
+        case .denied:
+            .red
+        case .unsupported:
+            .secondary
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .authorized:
+            "通知已授权"
+        case .notDetermined:
+            "尚未确认授权"
+        case .denied:
+            "已被拒绝"
+        case .unsupported:
+            "当前环境不支持通知"
         }
     }
 }
