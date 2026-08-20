@@ -96,6 +96,43 @@ final class CLIVersionCheckerTests: XCTestCase {
         XCTAssertFalse(report.skynetBaseFound)
     }
 
+    func testMCPRepairIsNeededOnlyForFixableFindings() {
+        XCTAssertTrue(
+            makeReport(
+                mcpConfiguration: MCPConfiguration(
+                    mcpSummary: MCPListSummary(
+                        total: 0,
+                        ideGroups: [:],
+                        skynetBaseIDEs: []
+                    ),
+                    skillCount: nil
+                )
+            ).needsMCPRepair
+        )
+        let missingCore = MCPConfiguration(
+            mcpSummary: MCPListSummary(
+                total: 5,
+                ideGroups: ["Cursor": 3, "Codex": 2],
+                skynetBaseIDEs: ["Cursor"]
+            ),
+            skillCount: nil
+        )
+        XCTAssertTrue(makeReport(mcpConfiguration: missingCore).needsMCPRepair)
+
+        let healthy = MCPConfiguration(
+            mcpSummary: MCPListSummary(
+                total: 4,
+                ideGroups: ["Cursor": 2, "Claude": 2],
+                skynetBaseIDEs: ["Cursor", "Claude"]
+            ),
+            skillCount: 3
+        )
+        XCTAssertFalse(makeReport(mcpConfiguration: healthy).needsMCPRepair)
+        XCTAssertFalse(makeReport(mcpConfiguration: nil).needsMCPRepair)
+        let unreadable = MCPConfiguration(mcpSummary: nil, skillCount: nil)
+        XCTAssertFalse(makeReport(mcpConfiguration: unreadable).needsMCPRepair)
+    }
+
     private func makeReport(current: String?, latest: String?) -> EnvironmentReport {
         EnvironmentReport(
             cliPath: "/fake/bin/skynet",
@@ -103,6 +140,16 @@ final class CLIVersionCheckerTests: XCTestCase {
             nodeVersion: "v22.23.2",
             networkAvailable: true,
             latestCLIVersion: latest
+        )
+    }
+
+    private func makeReport(mcpConfiguration: MCPConfiguration?) -> EnvironmentReport {
+        EnvironmentReport(
+            cliPath: "/fake/bin/skynet",
+            cliVersion: "2.7.29",
+            nodeVersion: "v22.23.2",
+            networkAvailable: true,
+            mcpConfiguration: mcpConfiguration
         )
     }
 }

@@ -48,4 +48,18 @@ public extension EnvironmentReport {
         }
         return latest > current
     }
+
+    // The probes ran and found something `skynet update tools` can fix:
+    // no MCP configured at all, or IDEs with MCP but without the core one.
+    var needsMCPRepair: Bool {
+        guard let summary = mcpConfiguration?.mcpSummary else {
+            return false
+        }
+        if summary.total == 0 {
+            return true
+        }
+        let missingCore = summary.ideGroups.keys
+            .filter { !summary.skynetBaseIDEs.contains($0) }
+        return !missingCore.isEmpty
+    }
 }

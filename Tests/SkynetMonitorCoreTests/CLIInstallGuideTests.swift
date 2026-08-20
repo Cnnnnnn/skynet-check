@@ -23,4 +23,9 @@ final class CLIInstallGuideTests: XCTestCase {
     func testUsesCLIUpdateCommand() {
         XCTAssertEqual(CLIInstallGuide.updateCommand, "skynet update")
     }
+
+    func testUsesRepairAndSyncCommands() {
+        XCTAssertEqual(CLIInstallGuide.skillSyncCommand, "skynet skill install")
+        XCTAssertEqual(CLIInstallGuide.mcpRepairCommand, "skynet update tools")
+    }
 }

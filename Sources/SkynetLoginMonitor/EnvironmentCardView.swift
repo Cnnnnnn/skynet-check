@@ -78,6 +78,9 @@ struct EnvironmentCardView: View {
                    !outdated.isEmpty {
                     skillSyncRow(outdatedCount: outdated.count)
                 }
+                if report.needsMCPRepair {
+                    mcpRepairRow
+                }
                 if notificationPermission.shouldShowInPanel {
                     notificationRow
                     if notificationPermission.needsSettingsShortcut {
@@ -121,6 +124,15 @@ struct EnvironmentCardView: View {
             detail: nil,
             primaryLabel: "用 Terminal 同步",
             primaryCommand: CLIInstallGuide.skillSyncCommand
+        )
+    }
+
+    private var mcpRepairRow: some View {
+        UpgradeActionRow(
+            title: "MCP 配置需要修复",
+            detail: nil,
+            primaryLabel: "用 Terminal 修复",
+            primaryCommand: CLIInstallGuide.mcpRepairCommand
         )
     }
 
