@@ -83,7 +83,7 @@ final class SkynetAuthCheckerTests: XCTestCase {
 
         let result = await checker.login(networkAvailable: true)
 
-        XCTAssertEqual(result, .completed(.authenticated(email: nil)))
+        XCTAssertEqual(result, .completed(.authenticated(email: nil), loginURL: nil))
         let invocations = await runner.invocations
         XCTAssertEqual(
             invocations.map(\.arguments),
@@ -100,6 +100,41 @@ final class SkynetAuthCheckerTests: XCTestCase {
 
         let version = await checker.version()
         XCTAssertEqual(version, "2.7.29")
+    }
+
+    func testLoginSurfacesPrintedLoginURLForManualFallback() async {
+        let runner = RecordingCommandRunner(results: [
+            .init(stdout: "使用 'skynet auth login' 进行登录", stderr: "", exitCode: 0, timedOut: false),
+            .init(
+                stdout: "请在浏览器打开: https://sso.example.com/login?token=abc123 完成登录\n",
+                stderr: "",
+                exitCode: 0,
+                timedOut: false
+            ),
+            .init(stdout: "认证状态: 未认证", stderr: "", exitCode: 0, timedOut: false),
+        ])
+        let checker = makeChecker(runner: runner)
+
+        let result = await checker.login(networkAvailable: true)
+
+        XCTAssertEqual(
+            result,
+            .completed(
+                .unauthenticated,
+                loginURL: URL(string: "https://sso.example.com/login?token=abc123")
+            )
+        )
+    }
+
+    func testExtractsFirstHTTPURLFromLoginOutput() {
+        XCTAssertEqual(
+            LoginURLExtractor.firstURL(
+                in: "打开 https://a.example.com/x?y=1 或 https://b.example.com"
+            ),
+            URL(string: "https://a.example.com/x?y=1")
+        )
+        XCTAssertNil(LoginURLExtractor.firstURL(in: "没有任何链接"))
+        XCTAssertNil(LoginURLExtractor.firstURL(in: ""))
     }
 
     private func makeChecker(runner: RecordingCommandRunner) -> SkynetAuthChecker {

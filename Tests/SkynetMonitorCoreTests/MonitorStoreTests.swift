@@ -459,7 +459,7 @@ final class MonitorStoreTests: XCTestCase {
         let store = MonitorStore(
             checker: StoreFakeChecker(
                 results: [],
-                loginResult: .completed(.offline)
+                loginResult: .completed(.offline, loginURL: nil)
             ),
             networkMonitor: StoreFakeNetworkMonitor(isAvailable: false),
             notifier: notifier,
@@ -468,7 +468,7 @@ final class MonitorStoreTests: XCTestCase {
 
         await store.login()
 
-        XCTAssertEqual(notifier.loginResults, [.completed(.offline)])
+        XCTAssertEqual(notifier.loginResults, [.completed(.offline, loginURL: nil)])
         XCTAssertEqual(store.state, .offline)
     }
 
@@ -563,7 +563,7 @@ private actor StoreFakeChecker: SkynetAuthChecking {
         if let loginResult {
             return loginResult
         }
-        return .completed(await check(networkAvailable: networkAvailable))
+        return LoginActionResult(state: await check(networkAvailable: networkAvailable))
     }
 
     func version() async -> String? {

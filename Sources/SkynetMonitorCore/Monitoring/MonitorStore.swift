@@ -18,6 +18,7 @@ public final class MonitorStore: ObservableObject {
     @Published public private(set) var availableUpdate: AppUpdateManifest?
     @Published public private(set) var sessionExpiresAt: Date?
     @Published public private(set) var sessionStatistics: SessionDurationStatistics?
+    @Published public private(set) var loginURL: URL?
     @Published public private(set) var serviceTokens: [ServiceToken] = []
     @Published public private(set) var tokenValidation: [String: ServiceTokenValidationOutcome] = [:]
 
@@ -169,6 +170,9 @@ public final class MonitorStore: ObservableObject {
         )
         let result = loginResult.state
         await complete(with: result)
+        // Keep the login URL around when the flow did not finish; the
+        // panel offers it as a manual fallback if no browser opened.
+        loginURL = loginResult.loginURL
         MonitorLog.store.info(
             "login flow completed: \(result.presentation.title, privacy: .public)"
         )

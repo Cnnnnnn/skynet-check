@@ -122,6 +122,16 @@ struct MenuBarView: View {
                     .foregroundStyle(.secondary)
             }
 
+            if let loginURL = store.loginURL, !store.state.isAuthenticated {
+                Button {
+                    NSWorkspace.shared.open(loginURL)
+                } label: {
+                    Label("打开登录页面", systemImage: "safari")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
             if let environmentReport = store.environmentReport {
                 EnvironmentCardView(
                     report: environmentReport,

@@ -16,8 +16,8 @@ final class LoginActionNotificationTests: XCTestCase {
 
     func testCompletedAuthenticationMessageReportsSuccess() {
         XCTAssertEqual(
-            LoginActionResult.completed(
-                .authenticated(email: "user@example.com")
+            LoginActionResult(
+                state: .authenticated(email: "user@example.com")
             ).notification,
             .init(
                 title: "Skynet 登录成功",
@@ -28,22 +28,22 @@ final class LoginActionNotificationTests: XCTestCase {
 
     func testCompletedFailureMessagesExplainNextAction() {
         XCTAssertEqual(
-            LoginActionResult.completed(.offline).notification,
+            LoginActionResult(state: .offline).notification,
             .init(
                 title: "Skynet 登录失败",
                 body: "网络不可用，请恢复网络后重试。"
             )
         )
         XCTAssertEqual(
-            LoginActionResult.completed(.cliMissing).notification,
+            LoginActionResult(state: .cliMissing).notification,
             .init(
                 title: "无法启动 Skynet 登录",
                 body: "未找到 Skynet CLI。"
             )
         )
         XCTAssertEqual(
-            LoginActionResult.completed(
-                .serviceError(message: "ignored")
+            LoginActionResult(
+                state: .serviceError(message: "ignored")
             ).notification,
             .init(
                 title: "Skynet 登录失败",

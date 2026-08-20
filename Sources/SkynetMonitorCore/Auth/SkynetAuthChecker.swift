@@ -54,11 +54,11 @@ public actor SkynetAuthChecker: SkynetAuthChecking {
             return .alreadyAuthenticated(email: email)
         }
         guard currentState == .unauthenticated else {
-            return .completed(currentState)
+            return LoginActionResult(state: currentState)
         }
 
         guard let executableURL = try? await locator.locate() else {
-            return .completed(.cliMissing)
+            return LoginActionResult(state: .cliMissing)
         }
 
         // The login flow opens a browser and waits for the user to finish
@@ -69,23 +69,26 @@ public actor SkynetAuthChecker: SkynetAuthChecking {
             environment: environment(for: executableURL),
             timeout: .seconds(300)
         )
+        let loginURL = LoginURLExtractor.firstURL(in: result.stdout)
 
         if !networkAvailable && (result.timedOut || result.exitCode != 0) {
-            return .completed(.offline)
+            return LoginActionResult(state: .offline, loginURL: loginURL)
         }
         guard !result.timedOut, result.exitCode == 0 else {
-            return .completed(
-                .serviceError(
+            return LoginActionResult(
+                state: .serviceError(
                     message: AuthOutputParser.errorDetail(
                         for: AuthOutput(result),
                         fallback: "Skynet login failed"
                     )
-                )
+                ),
+                loginURL: loginURL
             )
         }
 
-        return .completed(
-            await check(networkAvailable: networkAvailable)
+        return LoginActionResult(
+            state: await check(networkAvailable: networkAvailable),
+            loginURL: loginURL
         )
     }
 

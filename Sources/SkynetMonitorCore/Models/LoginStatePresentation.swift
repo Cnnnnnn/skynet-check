@@ -18,6 +18,15 @@ public struct LoginStatePresentation: Equatable, Sendable {
 }
 
 public extension LoginState {
+    var isAuthenticated: Bool {
+        guard case .authenticated = self else {
+            return false
+        }
+        return true
+    }
+}
+
+public extension LoginState {
     var presentation: LoginStatePresentation {
         switch self {
         case .checking:
