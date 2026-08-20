@@ -62,6 +62,10 @@ The menu bar panel uses a compact native macOS window layout with a status
 header, account metadata, primary action buttons, and a dedicated setup card
 when the CLI is missing.
 
+The panel also exposes the automatic-check interval as a slider from 3 to 60
+minutes. The default is 15 minutes; changes are persisted locally and restart
+the timer immediately.
+
 ## Uninstall
 
 Turn off **开机启动** in the menu first, quit the app, and move `/Applications/Skynet Login Monitor.app` to Trash. The app does not delete or modify Skynet CLI configuration.

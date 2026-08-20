@@ -115,6 +115,20 @@ struct MenuBarView: View {
                 .controlSize(.small)
             }
 
+            HStack(spacing: 10) {
+                Label("自动检查", systemImage: "timer")
+                    .font(.subheadline)
+                Slider(
+                    value: pollingIntervalBinding,
+                    in: 3.0...60.0,
+                    step: 1
+                )
+                Text("\(store.pollingIntervalMinutes) 分钟")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 52, alignment: .trailing)
+            }
+
             if launchAtLogin.requiresApproval {
                 Text("需要在“系统设置 → 登录项”中允许")
                     .font(.caption)
@@ -203,6 +217,15 @@ struct MenuBarView: View {
         .padding(12)
         .background(Color.orange.opacity(0.10))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var pollingIntervalBinding: Binding<Double> {
+        Binding(
+            get: { Double(store.pollingIntervalMinutes) },
+            set: { value in
+                store.setPollingInterval(Int(value.rounded()))
+            }
+        )
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {

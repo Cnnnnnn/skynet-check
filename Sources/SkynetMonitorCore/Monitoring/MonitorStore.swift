@@ -7,11 +7,13 @@ public final class MonitorStore: ObservableObject {
     @Published public private(set) var lastCheckedAt: Date?
     @Published public private(set) var cliVersion: String?
     @Published public private(set) var isChecking = false
+    @Published public private(set) var pollingIntervalMinutes: Int
 
     private let checker: any SkynetAuthChecking
     private let networkMonitor: any NetworkMonitoring
     private let notifier: any LoginNotifying
-    private let periodicInterval: Duration?
+    private let periodicChecksEnabled: Bool
+    private let pollingInterval: PollingInterval
     private let confirmationDelay: Duration
 
     private var transitionTracker = LoginTransitionTracker()
@@ -26,13 +28,16 @@ public final class MonitorStore: ObservableObject {
         networkMonitor: any NetworkMonitoring,
         notifier: any LoginNotifying,
         periodicInterval: Duration? = .seconds(15 * 60),
-        confirmationDelay: Duration = .seconds(30)
+        confirmationDelay: Duration = .seconds(30),
+        pollingInterval: PollingInterval = PollingInterval()
     ) {
         self.checker = checker
         self.networkMonitor = networkMonitor
         self.notifier = notifier
-        self.periodicInterval = periodicInterval
+        self.periodicChecksEnabled = periodicInterval != nil
         self.confirmationDelay = confirmationDelay
+        self.pollingInterval = pollingInterval
+        self.pollingIntervalMinutes = pollingInterval.minutes
     }
 
     public func start() async {
@@ -114,6 +119,19 @@ public final class MonitorStore: ObservableObject {
         started = false
     }
 
+    public func setPollingInterval(_ minutes: Int) {
+        let clamped = PollingInterval.clamped(minutes)
+        pollingInterval.setMinutes(clamped)
+        pollingIntervalMinutes = clamped
+
+        guard started, periodicChecksEnabled else {
+            return
+        }
+        periodicTask?.cancel()
+        periodicTask = nil
+        startPeriodicChecks()
+    }
+
     private func handleTransition(_ result: LoginState) async {
         switch transitionTracker.consume(result) {
         case .none:
@@ -150,9 +168,10 @@ public final class MonitorStore: ObservableObject {
     }
 
     private func startPeriodicChecks() {
-        guard periodicTask == nil, let periodicInterval else {
+        guard periodicTask == nil, periodicChecksEnabled else {
             return
         }
+        let periodicInterval = Duration.seconds(pollingIntervalMinutes * 60)
 
         periodicTask = Task { [weak self] in
             while !Task.isCancelled {

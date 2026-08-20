@@ -110,6 +110,25 @@ final class MonitorStoreTests: XCTestCase {
         XCTAssertTrue(notifier.manualCheckResults.isEmpty)
     }
 
+    func testPollingIntervalIsClampedAndPersistedWhenChanged() {
+        let suiteName = "MonitorStorePollingTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = PollingInterval(defaults: defaults)
+        let store = MonitorStore(
+            checker: StoreFakeChecker(results: []),
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: true),
+            notifier: StoreFakeNotifier(),
+            periodicInterval: nil,
+            pollingInterval: settings
+        )
+
+        store.setPollingInterval(90)
+
+        XCTAssertEqual(store.pollingIntervalMinutes, 60)
+        XCTAssertEqual(settings.minutes, 60)
+    }
+
     func testLoginNotifiesWhenSessionIsAlreadyAuthenticated() async {
         let notifier = StoreFakeNotifier()
         let store = MonitorStore(
