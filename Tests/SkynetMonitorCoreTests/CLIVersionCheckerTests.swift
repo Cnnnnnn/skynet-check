@@ -45,7 +45,7 @@ final class CLIVersionCheckerTests: XCTestCase {
         let doctor = EnvironmentDoctor(
             locator: DoctorStubLocator(url: URL(fileURLWithPath: "/fake/bin/skynet")),
             checker: DoctorStubChecker(version: "2.7.29"),
-            runner: DoctorStubRunner(),
+            runner: DoctorStubRunner(skynetBaseResult: .failed()),
             cliVersionChecker: DoctorStubVersionChecker(latest: "2.7.33")
         )
 
@@ -59,7 +59,7 @@ final class CLIVersionCheckerTests: XCTestCase {
         let doctor = EnvironmentDoctor(
             locator: DoctorStubLocator(url: URL(fileURLWithPath: "/fake/bin/skynet")),
             checker: DoctorStubChecker(version: "2.7.29"),
-            runner: DoctorStubRunner(),
+            runner: DoctorStubRunner(skynetBaseResult: .failed()),
             cliVersionChecker: DoctorStubVersionChecker(error: URLError(.notConnectedToInternet))
         )
 
@@ -69,14 +69,12 @@ final class CLIVersionCheckerTests: XCTestCase {
     }
 
     func testDoctorDetectsSkynetBaseFromLoginShell() async {
-        let runner = DoctorStubRunner(results: [
-            .succeeded(stdout: "v22.23.2\n"),
-            .succeeded(stdout: "/opt/homebrew/bin/skynet-base\n"),
-        ])
         let doctor = EnvironmentDoctor(
             locator: DoctorStubLocator(url: URL(fileURLWithPath: "/fake/bin/skynet")),
             checker: DoctorStubChecker(version: "2.7.29"),
-            runner: runner,
+            runner: DoctorStubRunner(
+                skynetBaseResult: .succeeded(stdout: "/opt/homebrew/bin/skynet-base\n")
+            ),
             cliVersionChecker: DoctorStubVersionChecker(latest: "2.7.33")
         )
 
@@ -87,15 +85,10 @@ final class CLIVersionCheckerTests: XCTestCase {
     }
 
     func testDoctorMarksSkynetBaseMissingWhenShellCannotFindIt() async {
-        let runner = DoctorStubRunner(results: [
-            .succeeded(stdout: "v22.23.2\n"),
-            .failed(),
-            .failed(),
-        ])
         let doctor = EnvironmentDoctor(
             locator: DoctorStubLocator(url: URL(fileURLWithPath: "/fake/bin/skynet")),
             checker: DoctorStubChecker(version: "2.7.29"),
-            runner: runner
+            runner: DoctorStubRunner(skynetBaseResult: .failed())
         )
 
         let report = await doctor.inspect(networkAvailable: true)
@@ -145,11 +138,13 @@ private struct DoctorStubChecker: SkynetAuthChecking {
     }
 }
 
+// Probes run concurrently inside EnvironmentDoctor, so this runner routes
+// by command instead of consuming an ordered queue.
 private actor DoctorStubRunner: CommandRunning {
-    private var results: [CommandResult]
+    private let skynetBaseResult: CommandResult
 
-    init(results: [CommandResult] = []) {
-        self.results = results
+    init(skynetBaseResult: CommandResult) {
+        self.skynetBaseResult = skynetBaseResult
     }
 
     func run(
@@ -158,7 +153,14 @@ private actor DoctorStubRunner: CommandRunning {
         environment: [String: String],
         timeout: Duration
     ) async -> CommandResult {
-        results.isEmpty ? .failed() : results.removeFirst()
+        let command = arguments.joined(separator: " ")
+        if command.contains("node --version") {
+            return .succeeded(stdout: "v22.23.2\n")
+        }
+        if command.contains("command -v skynet-base") {
+            return skynetBaseResult
+        }
+        return .failed()
     }
 }
 

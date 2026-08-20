@@ -196,12 +196,10 @@ final class MCPOutputParserTests: XCTestCase {
         let lockURL = try writeTemporaryLock(
             baseline: ["fe-api-gen": "v10", "fe-td-generator": "v11"]
         )
-        let runner = DoctorProbingRunner(results: [
-            .succeeded(stdout: "v22.23.2\n"),               // node --version
-            .succeeded(stdout: "/opt/homebrew/bin/skynet-base\n"), // skynet-base
-            .succeeded(stdout: mcpListOutput + "\n"),       // mcp list
-            .succeeded(stdout: skillListJSON),              // skill list --json
-        ])
+        let runner = RoutingDoctorRunner(
+            mcpListOutput: mcpListOutput,
+            skillListOutput: skillListJSON
+        )
         let doctor = EnvironmentDoctor(
             locator: DoctorStubLocator(url: URL(fileURLWithPath: "/fake/bin/skynet")),
             checker: DoctorStubChecker(version: "2.7.29"),
@@ -251,11 +249,15 @@ final class MCPOutputParserTests: XCTestCase {
     }
 }
 
-private actor DoctorProbingRunner: CommandRunning {
-    private var results: [CommandResult]
+// Probes run concurrently inside EnvironmentDoctor, so this runner routes
+// by command instead of consuming an ordered queue.
+private actor RoutingDoctorRunner: CommandRunning {
+    private let mcpListOutput: String
+    private let skillListOutput: String
 
-    init(results: [CommandResult]) {
-        self.results = results
+    init(mcpListOutput: String, skillListOutput: String) {
+        self.mcpListOutput = mcpListOutput
+        self.skillListOutput = skillListOutput
     }
 
     func run(
@@ -264,13 +266,30 @@ private actor DoctorProbingRunner: CommandRunning {
         environment: [String: String],
         timeout: Duration
     ) async -> CommandResult {
-        results.isEmpty ? .succeeded(stdout: "") : results.removeFirst()
+        let command = arguments.joined(separator: " ")
+        if command.contains("node --version") {
+            return .succeeded(stdout: "v22.23.2\n")
+        }
+        if command.contains("command -v skynet-base") {
+            return .succeeded(stdout: "/opt/homebrew/bin/skynet-base\n")
+        }
+        if arguments.contains("mcp") {
+            return .succeeded(stdout: mcpListOutput + "\n")
+        }
+        if arguments.contains("skill") {
+            return .succeeded(stdout: skillListOutput + "\n")
+        }
+        return .failed()
     }
 }
 
 private extension CommandResult {
     static func succeeded(stdout: String) -> Self {
         CommandResult(stdout: stdout, stderr: "", exitCode: 0, timedOut: false)
+    }
+
+    static func failed() -> Self {
+        CommandResult(stdout: "", stderr: "", exitCode: 1, timedOut: false)
     }
 }
 

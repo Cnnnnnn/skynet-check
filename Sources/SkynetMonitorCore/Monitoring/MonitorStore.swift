@@ -111,9 +111,14 @@ public final class MonitorStore: ObservableObject {
             self?.handleNetworkChange(available: available)
         }
 
-        cliVersion = await checker.version()
-        await inspectEnvironment()
+        // The first check decides the menu bar state and must not wait for
+        // the slow environment probes; version and diagnostics run in
+        // parallel and settle before start() returns.
+        async let version = checker.version()
+        async let inspection = inspectEnvironment()
         await refresh()
+        cliVersion = await version
+        await inspection
         startPeriodicChecks()
         MonitorLog.store.info("monitor started")
     }

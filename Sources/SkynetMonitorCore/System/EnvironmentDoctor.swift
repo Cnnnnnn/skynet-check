@@ -191,15 +191,23 @@ public actor EnvironmentDoctor {
 
     public func inspect(networkAvailable: Bool) async -> EnvironmentReport {
         let cliURL = try? await locator.locate()
-        let nodeVersion = await discoverNodeVersion()
+
+        // All probes are independent; run them concurrently so the report
+        // takes as long as the slowest probe, not their sum.
+        async let nodeVersion = discoverNodeVersion()
+        async let cliVersion = checker.version()
+        async let latestVersion = fetchLatestCLIVersion()
+        async let skynetBaseFound = isSkynetBaseInstalled()
+        async let mcpConfiguration = probeMCPConfiguration(cliURL: cliURL)
+
         return EnvironmentReport(
             cliPath: cliURL?.path,
-            cliVersion: await checker.version(),
-            nodeVersion: nodeVersion,
+            cliVersion: await cliVersion,
+            nodeVersion: await nodeVersion,
             networkAvailable: networkAvailable,
-            latestCLIVersion: await fetchLatestCLIVersion(),
-            skynetBaseFound: await isSkynetBaseInstalled(),
-            mcpConfiguration: await probeMCPConfiguration(cliURL: cliURL)
+            latestCLIVersion: await latestVersion,
+            skynetBaseFound: await skynetBaseFound,
+            mcpConfiguration: await mcpConfiguration
         )
     }
 
