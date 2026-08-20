@@ -12,7 +12,27 @@ final class EnvironmentDoctorTests: XCTestCase {
 
         XCTAssertEqual(
             report.checks.map(\.status),
-            [.failed, .failed, .passed]
+            [.failed, .failed, .passed, .passed]
+        )
+    }
+
+    func testReportWarnsWhenSkynetBaseIsMissing() {
+        let report = EnvironmentReport(
+            cliPath: "/opt/homebrew/bin/skynet",
+            cliVersion: "2.7.29",
+            nodeVersion: "v22.23.2",
+            networkAvailable: true,
+            latestCLIVersion: nil,
+            skynetBaseFound: false
+        )
+
+        XCTAssertEqual(
+            report.checks.last?.status,
+            .warning
+        )
+        XCTAssertEqual(
+            report.checks.last?.detail,
+            "未安装，key 功能不可用"
         )
     }
 

@@ -68,6 +68,41 @@ final class CLIVersionCheckerTests: XCTestCase {
         XCTAssertNil(report.latestCLIVersion)
     }
 
+    func testDoctorDetectsSkynetBaseFromLoginShell() async {
+        let runner = DoctorStubRunner(results: [
+            .succeeded(stdout: "v22.23.2\n"),
+            .succeeded(stdout: "/opt/homebrew/bin/skynet-base\n"),
+        ])
+        let doctor = EnvironmentDoctor(
+            locator: DoctorStubLocator(url: URL(fileURLWithPath: "/fake/bin/skynet")),
+            checker: DoctorStubChecker(version: "2.7.29"),
+            runner: runner,
+            cliVersionChecker: DoctorStubVersionChecker(latest: "2.7.33")
+        )
+
+        let report = await doctor.inspect(networkAvailable: true)
+
+        XCTAssertEqual(report.nodeVersion, "v22.23.2")
+        XCTAssertTrue(report.skynetBaseFound)
+    }
+
+    func testDoctorMarksSkynetBaseMissingWhenShellCannotFindIt() async {
+        let runner = DoctorStubRunner(results: [
+            .succeeded(stdout: "v22.23.2\n"),
+            .failed(),
+            .failed(),
+        ])
+        let doctor = EnvironmentDoctor(
+            locator: DoctorStubLocator(url: URL(fileURLWithPath: "/fake/bin/skynet")),
+            checker: DoctorStubChecker(version: "2.7.29"),
+            runner: runner
+        )
+
+        let report = await doctor.inspect(networkAvailable: true)
+
+        XCTAssertFalse(report.skynetBaseFound)
+    }
+
     private func makeReport(current: String?, latest: String?) -> EnvironmentReport {
         EnvironmentReport(
             cliPath: "/fake/bin/skynet",
@@ -110,13 +145,29 @@ private struct DoctorStubChecker: SkynetAuthChecking {
     }
 }
 
-private struct DoctorStubRunner: CommandRunning {
+private actor DoctorStubRunner: CommandRunning {
+    private var results: [CommandResult]
+
+    init(results: [CommandResult] = []) {
+        self.results = results
+    }
+
     func run(
         executableURL: URL,
         arguments: [String],
         environment: [String: String],
         timeout: Duration
     ) async -> CommandResult {
+        results.isEmpty ? .failed() : results.removeFirst()
+    }
+}
+
+private extension CommandResult {
+    static func succeeded(stdout: String) -> Self {
+        CommandResult(stdout: stdout, stderr: "", exitCode: 0, timedOut: false)
+    }
+
+    static func failed() -> Self {
         CommandResult(stdout: "", stderr: "", exitCode: 1, timedOut: false)
     }
 }

@@ -99,6 +99,8 @@ public enum MonitorText {
         public static let nodeMissingDetail = "未找到 Node.js"
         public static let networkAvailableDetail = "网络可用"
         public static let networkUnavailableDetail = "网络不可用"
+        public static let skynetBaseFoundDetail = "已安装"
+        public static let skynetBaseMissingDetail = "未安装，key 功能不可用"
     }
 
     public enum Permission {

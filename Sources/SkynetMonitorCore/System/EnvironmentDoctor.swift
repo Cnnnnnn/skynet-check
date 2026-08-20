@@ -28,19 +28,22 @@ public struct EnvironmentReport: Equatable, Sendable {
     public let nodeVersion: String?
     public let networkAvailable: Bool
     public let latestCLIVersion: String?
+    public let skynetBaseFound: Bool
 
     public init(
         cliPath: String?,
         cliVersion: String?,
         nodeVersion: String?,
         networkAvailable: Bool,
-        latestCLIVersion: String? = nil
+        latestCLIVersion: String? = nil,
+        skynetBaseFound: Bool = true
     ) {
         self.cliPath = cliPath
         self.cliVersion = cliVersion
         self.nodeVersion = nodeVersion
         self.networkAvailable = networkAvailable
         self.latestCLIVersion = latestCLIVersion
+        self.skynetBaseFound = skynetBaseFound
     }
 
     public var checks: [EnvironmentCheck] {
@@ -61,6 +64,16 @@ public struct EnvironmentReport: Equatable, Sendable {
                 detail: networkAvailable
                     ? MonitorText.Environment.networkAvailableDetail
                     : MonitorText.Environment.networkUnavailableDetail
+            ),
+            // skynet-base backs the key/ide-key commands; it is optional for
+            // login monitoring, so a missing binary is a warning, not a
+            // failure.
+            EnvironmentCheck(
+                name: "skynet-base",
+                status: skynetBaseFound ? .passed : .warning,
+                detail: skynetBaseFound
+                    ? MonitorText.Environment.skynetBaseFoundDetail
+                    : MonitorText.Environment.skynetBaseMissingDetail
             ),
         ]
     }
@@ -92,8 +105,15 @@ public actor EnvironmentDoctor {
             cliVersion: await checker.version(),
             nodeVersion: nodeVersion,
             networkAvailable: networkAvailable,
-            latestCLIVersion: await fetchLatestCLIVersion()
+            latestCLIVersion: await fetchLatestCLIVersion(),
+            skynetBaseFound: await isSkynetBaseInstalled()
         )
+    }
+
+    // skynet spawns the skynet-base binary from the user's shell PATH, so
+    // presence is probed in a login shell rather than the app's own PATH.
+    private func isSkynetBaseInstalled() async -> Bool {
+        await shellResolver.resolve(command: "command -v skynet-base") != nil
     }
 
     private func fetchLatestCLIVersion() async -> String? {
