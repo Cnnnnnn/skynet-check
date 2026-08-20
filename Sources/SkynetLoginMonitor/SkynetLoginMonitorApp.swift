@@ -45,20 +45,18 @@ struct SkynetLoginMonitorApp: App {
                 launchAtLogin: launchAtLogin
             )
         } label: {
-            Label(
-                store.state.presentation.title,
-                systemImage: store.state.presentation.symbolName
-            )
-            .task {
-                await store.start()
-            }
-            .onReceive(
-                NSWorkspace.shared.notificationCenter.publisher(
-                    for: NSWorkspace.didWakeNotification
-                )
-            ) { _ in
-                store.handleWake()
-            }
+            Image(nsImage: MenuBarIcon.image(for: store.state))
+                .accessibilityLabel(store.state.presentation.title)
+                .task {
+                    await store.start()
+                }
+                .onReceive(
+                    NSWorkspace.shared.notificationCenter.publisher(
+                        for: NSWorkspace.didWakeNotification
+                    )
+                ) { _ in
+                    store.handleWake()
+                }
         }
         .menuBarExtraStyle(.window)
     }
