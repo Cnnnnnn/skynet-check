@@ -25,6 +25,7 @@ struct SkynetLoginMonitorApp: App {
             ),
             stateStore: LoginStateStore(),
             sessionExpiryStore: SessionExpiryStore(),
+            serviceTokenReader: ServiceTokenStore(),
             updateChecker: HTTPAppUpdateChecker(
                 manifestURL: AppConfiguration.updateManifestURL
             ),

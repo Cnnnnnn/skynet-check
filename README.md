@@ -8,7 +8,12 @@ A personal macOS menu bar app that checks the local Skynet CLI login state and w
 - Xcode command-line tools with Swift 6
 - Skynet CLI available from the interactive zsh/NVM environment
 
-The app never reads `~/.skynet-cli/session.json` and never stores CLI output or token material.
+The app never reads `~/.skynet-cli/session.json` and never stores CLI output
+or token material. One exception by design: service tokens the Skynet CLI
+keeps in `~/.skynet-cli/tokens.json` (e.g. the Confluence token) can be
+copied from the panel on demand. Token values are masked on screen, never
+logged, never included in the diagnostics report, and never persisted by the
+app — the CLI's file remains the single source of truth.
 
 ## Build and run
 

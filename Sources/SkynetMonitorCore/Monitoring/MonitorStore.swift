@@ -17,6 +17,7 @@ public final class MonitorStore: ObservableObject {
     @Published public private(set) var updateStatus: AppUpdateStatus = .idle
     @Published public private(set) var availableUpdate: AppUpdateManifest?
     @Published public private(set) var sessionExpiresAt: Date?
+    @Published public private(set) var serviceTokens: [ServiceToken] = []
 
     private let checker: any SkynetAuthChecking
     private let networkMonitor: any NetworkMonitoring
@@ -34,6 +35,7 @@ public final class MonitorStore: ObservableObject {
     private var transitionTracker = LoginTransitionTracker()
     private let stateStore: (any LoginStateStoring)?
     private let sessionExpiryStore: (any SessionExpiryStoring)?
+    private let serviceTokenReader: (any ServiceTokenReading)?
     private var expiryTracker: SessionExpiryTracker
     private var expiryAdvisor = SessionExpiryAdvisor()
     private var periodicTask: Task<Void, Never>?
@@ -55,6 +57,7 @@ public final class MonitorStore: ObservableObject {
         permissionManager: SkynetPermissionManager = SkynetPermissionManager(),
         stateStore: (any LoginStateStoring)? = nil,
         sessionExpiryStore: (any SessionExpiryStoring)? = nil,
+        serviceTokenReader: (any ServiceTokenReading)? = nil,
         updateChecker: (any AppUpdateChecking)? = nil,
         currentAppVersion: String? = nil,
         now: @escaping @Sendable () -> Date = Date.init
@@ -71,6 +74,7 @@ public final class MonitorStore: ObservableObject {
         self.permissionManager = permissionManager
         self.stateStore = stateStore
         self.sessionExpiryStore = sessionExpiryStore
+        self.serviceTokenReader = serviceTokenReader
         self.expiryTracker = SessionExpiryTracker(
             record: sessionExpiryStore?.load() ?? SessionExpiryRecord()
         )
@@ -207,6 +211,15 @@ public final class MonitorStore: ObservableObject {
 
     public func inspectEnvironment() async {
         notificationPermission = await notifier.authorizationStatus()
+        if let serviceTokenReader {
+            // Values are published for the panel's copy action only; never
+            // logged and never part of the diagnostics report.
+            let tokens = serviceTokenReader.availableTokens()
+            serviceTokens = tokens
+            MonitorLog.store.info(
+                "loaded \(tokens.count, privacy: .public) service token(s)"
+            )
+        }
         guard let environmentDoctor else {
             return
         }

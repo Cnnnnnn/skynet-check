@@ -3,6 +3,21 @@
 All notable changes to this project are documented in this file. Versions
 follow the newest `v*` git tag; the build number is the commit count.
 
+## [Unreleased]
+
+### Added
+
+- Environment diagnostics now cover CLI registry updates (with a Terminal
+  upgrade shortcut), the `skynet-base` binary, MCP configuration (core MCP
+  missing per IDE), installed Skills, and Skills outdated against the team
+  lock baseline (with a Terminal sync shortcut).
+- Predictive session-expiry warnings estimated from observed login periods
+  (60/15-minute two-stage alerts).
+- "复制诊断" button producing a plain-text diagnostics report.
+- Service token card: Confluence (and other future service) tokens stored
+  by the CLI can be copied from the panel; values are masked on screen and
+  kept out of logs, diagnostics, and persistence.
+
 ## [0.3.0] - 2026-08-21
 
 ### Added

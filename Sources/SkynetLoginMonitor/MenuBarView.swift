@@ -124,6 +124,10 @@ struct MenuBarView: View {
                 )
             }
 
+            if !store.serviceTokens.isEmpty {
+                ServiceTokenCardView(tokens: store.serviceTokens)
+            }
+
             if store.permissionAudit.needsRepair {
                 PermissionCardView(
                     repairMessage: store.permissionRepairMessage,
