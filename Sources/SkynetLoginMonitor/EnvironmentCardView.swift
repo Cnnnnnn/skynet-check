@@ -8,6 +8,7 @@ struct EnvironmentCardView: View {
     let onRecheck: () -> Void
 
     @State private var isExpanded = false
+    @State private var upgradeCommandCopied = false
 
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
@@ -17,6 +18,9 @@ struct EnvironmentCardView: View {
                     id: \.offset
                 ) { _, check in
                     checkRow(check)
+                }
+                if report.isCLIBehindLatest {
+                    cliUpgradeRow
                 }
                 if notificationPermission.shouldShowInPanel {
                     notificationRow
@@ -42,6 +46,32 @@ struct EnvironmentCardView: View {
         .padding(10)
         .background(Color.blue.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var cliUpgradeRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.up.circle.fill")
+                    .foregroundStyle(.orange)
+                    .accessibilityHidden(true)
+                Text("CLI 有新版 \(report.latestCLIVersion ?? "")")
+                    .font(.caption)
+                Spacer()
+                Text("当前 \(report.cliVersion ?? "")")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Button(upgradeCommandCopied ? "升级命令已复制" : "复制升级命令") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(
+                    CLIInstallGuide.skynetCommand,
+                    forType: .string
+                )
+                upgradeCommandCopied = true
+            }
+            .buttonStyle(.borderless)
+            .font(.caption)
+        }
     }
 
     private func checkRow(_ check: EnvironmentCheck) -> some View {

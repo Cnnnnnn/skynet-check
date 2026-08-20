@@ -27,17 +27,20 @@ public struct EnvironmentReport: Equatable, Sendable {
     public let cliVersion: String?
     public let nodeVersion: String?
     public let networkAvailable: Bool
+    public let latestCLIVersion: String?
 
     public init(
         cliPath: String?,
         cliVersion: String?,
         nodeVersion: String?,
-        networkAvailable: Bool
+        networkAvailable: Bool,
+        latestCLIVersion: String? = nil
     ) {
         self.cliPath = cliPath
         self.cliVersion = cliVersion
         self.nodeVersion = nodeVersion
         self.networkAvailable = networkAvailable
+        self.latestCLIVersion = latestCLIVersion
     }
 
     public var checks: [EnvironmentCheck] {
@@ -67,15 +70,18 @@ public actor EnvironmentDoctor {
     private let locator: any CLIPathLocating
     private let checker: any SkynetAuthChecking
     private let shellResolver: LoginShellResolver
+    private let cliVersionChecker: (any CLIVersionChecking)?
 
     public init(
         locator: any CLIPathLocating,
         checker: any SkynetAuthChecking,
-        runner: any CommandRunning
+        runner: any CommandRunning,
+        cliVersionChecker: (any CLIVersionChecking)? = nil
     ) {
         self.locator = locator
         self.checker = checker
         self.shellResolver = LoginShellResolver(runner: runner)
+        self.cliVersionChecker = cliVersionChecker
     }
 
     public func inspect(networkAvailable: Bool) async -> EnvironmentReport {
@@ -85,8 +91,24 @@ public actor EnvironmentDoctor {
             cliPath: cliURL?.path,
             cliVersion: await checker.version(),
             nodeVersion: nodeVersion,
-            networkAvailable: networkAvailable
+            networkAvailable: networkAvailable,
+            latestCLIVersion: await fetchLatestCLIVersion()
         )
+    }
+
+    private func fetchLatestCLIVersion() async -> String? {
+        guard let cliVersionChecker else {
+            return nil
+        }
+        do {
+            let latest = try await cliVersionChecker.fetchLatest()
+            MonitorLog.cli.info("registry reports latest skynet CLI \(latest, privacy: .public)")
+            return latest
+        } catch {
+            // Registry reachability is best-effort; diagnostics still work.
+            MonitorLog.cli.debug("failed to fetch latest CLI version")
+            return nil
+        }
     }
 
     private func discoverNodeVersion() async -> String? {

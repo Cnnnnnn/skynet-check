@@ -20,7 +20,8 @@ struct SkynetLoginMonitorApp: App {
             environmentDoctor: EnvironmentDoctor(
                 locator: locator,
                 checker: checker,
-                runner: runner
+                runner: runner,
+                cliVersionChecker: RegistryCLIVersionChecker()
             ),
             stateStore: LoginStateStore(),
             sessionExpiryStore: SessionExpiryStore(),
