@@ -205,6 +205,16 @@ struct MenuBarView: View {
             }
 
             HStack {
+                Button("重置会话统计") {
+                    store.resetSessionStatistics()
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                Spacer()
+            }
+
+            HStack {
                 Text("Skynet Login Monitor \(appVersionText)")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)

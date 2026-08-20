@@ -44,6 +44,44 @@ final class CommandRunnerTests: XCTestCase {
         XCTAssertGreaterThan(result.stdout.count, 262_144)
     }
 
+    func testStreamsLinesWhileCommandRuns() async {
+        let collector = LockedLineCollector()
+        let result = await ProcessCommandRunner().run(
+            executableURL: URL(fileURLWithPath: "/bin/zsh"),
+            arguments: [
+                "-c",
+                "echo first; sleep 0.3; echo url https://login.example.com/abc",
+            ],
+            environment: [:],
+            timeout: .seconds(10),
+            onLine: { line in
+                collector.append(line)
+            }
+        )
+
+        let lines = collector.lines
+
+        XCTAssertEqual(result.exitCode, 0)
+        XCTAssertFalse(result.timedOut)
+        XCTAssertTrue(lines.contains("first"))
+        XCTAssertTrue(lines.contains("url https://login.example.com/abc"))
+    }
+
+    private final class LockedLineCollector: @unchecked Sendable {
+        private let lock = NSLock()
+        private var items: [String] = []
+
+        var lines: [String] {
+            lock.withLock { items }
+        }
+
+        func append(_ line: String) {
+            lock.withLock {
+                items.append(line)
+            }
+        }
+    }
+
     func testKillsProcessThatIgnoresSIGTERM() async {
         let clock = ContinuousClock()
         let startedAt = clock.now

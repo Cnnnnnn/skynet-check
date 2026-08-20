@@ -6,6 +6,17 @@ public protocol SkynetAuthChecking: Sendable {
     func version() async -> String?
 }
 
+public extension SkynetAuthChecking {
+    // Streaming variant; conformances that do not override it simply lose
+    // the early URL callback and keep the final result.
+    func login(
+        networkAvailable: Bool,
+        onLoginURL: @escaping @Sendable (URL) -> Void
+    ) async -> LoginActionResult {
+        await login(networkAvailable: networkAvailable)
+    }
+}
+
 public actor SkynetAuthChecker: SkynetAuthChecking {
     private let locator: any CLIPathLocating
     private let runner: any CommandRunning
@@ -49,6 +60,13 @@ public actor SkynetAuthChecker: SkynetAuthChecking {
     }
 
     public func login(networkAvailable: Bool) async -> LoginActionResult {
+        await login(networkAvailable: networkAvailable, onLoginURL: { _ in })
+    }
+
+    public func login(
+        networkAvailable: Bool,
+        onLoginURL: @escaping @Sendable (URL) -> Void
+    ) async -> LoginActionResult {
         let currentState = await check(networkAvailable: networkAvailable)
         if case let .authenticated(email) = currentState {
             return .alreadyAuthenticated(email: email)
@@ -62,12 +80,18 @@ public actor SkynetAuthChecker: SkynetAuthChecking {
         }
 
         // The login flow opens a browser and waits for the user to finish
-        // authenticating, which routinely takes longer than a minute.
+        // authenticating, which routinely takes longer than a minute. The
+        // URL is printed early, so it streams out for a manual fallback.
         let result = await runner.run(
             executableURL: executableURL,
             arguments: ["auth", "login"],
             environment: environment(for: executableURL),
-            timeout: .seconds(300)
+            timeout: .seconds(300),
+            onLine: { line in
+                if let url = LoginURLExtractor.firstURL(in: line) {
+                    onLoginURL(url)
+                }
+            }
         )
         let loginURL = LoginURLExtractor.firstURL(in: result.stdout)
 

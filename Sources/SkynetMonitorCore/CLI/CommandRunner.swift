@@ -28,6 +28,25 @@ public protocol CommandRunning: Sendable {
     ) async -> CommandResult
 }
 
+public extension CommandRunning {
+    // Streaming variant; the default falls back to the buffered run and
+    // ignores the callback so existing conformances keep working.
+    func run(
+        executableURL: URL,
+        arguments: [String],
+        environment: [String: String],
+        timeout: Duration,
+        onLine: @escaping @Sendable (String) -> Void
+    ) async -> CommandResult {
+        await run(
+            executableURL: executableURL,
+            arguments: arguments,
+            environment: environment,
+            timeout: timeout
+        )
+    }
+}
+
 public struct ProcessCommandRunner: CommandRunning {
     public init() {}
 
@@ -37,11 +56,28 @@ public struct ProcessCommandRunner: CommandRunning {
         environment: [String: String],
         timeout: Duration
     ) async -> CommandResult {
+        await run(
+            executableURL: executableURL,
+            arguments: arguments,
+            environment: environment,
+            timeout: timeout,
+            onLine: { _ in }
+        )
+    }
+
+    public func run(
+        executableURL: URL,
+        arguments: [String],
+        environment: [String: String],
+        timeout: Duration,
+        onLine: @escaping @Sendable (String) -> Void
+    ) async -> CommandResult {
         await Task.detached(priority: .utility) {
             let execution = ProcessExecution(
                 executableURL: executableURL,
                 arguments: arguments,
-                environment: environment
+                environment: environment,
+                onOutputLine: onLine
             )
             return await execution.run(timeout: timeout)
         }.value
@@ -56,12 +92,15 @@ private final class ProcessExecution: @unchecked Sendable {
     private let standardError = Pipe()
     private let lock = NSLock()
     private var didTimeOut = false
+    private let onOutputLine: (@Sendable (String) -> Void)?
 
     init(
         executableURL: URL,
         arguments: [String],
-        environment: [String: String]
+        environment: [String: String],
+        onOutputLine: (@Sendable (String) -> Void)? = nil
     ) {
+        self.onOutputLine = onOutputLine
         process.executableURL = executableURL
         process.arguments = arguments
         process.environment = environment
@@ -83,12 +122,19 @@ private final class ProcessExecution: @unchecked Sendable {
 
         // Both pipes must be drained while the child runs: a child that
         // fills the pipe buffer blocks on write and never exits, which
-        // would deadlock waitUntilExit below.
+        // would deadlock waitUntilExit below. Lines stream to onOutputLine
+        // as they arrive so long-running commands can surface output early.
         let stdoutReader = Task.detached(priority: .utility) {
-            self.readToEnd(self.standardOutput.fileHandleForReading)
+            await self.readLines(
+                from: self.standardOutput.fileHandleForReading,
+                onLine: self.onOutputLine
+            )
         }
         let stderrReader = Task.detached(priority: .utility) {
-            self.readToEnd(self.standardError.fileHandleForReading)
+            await self.readLines(
+                from: self.standardError.fileHandleForReading,
+                onLine: nil
+            )
         }
 
         let watchdog = Task {
@@ -121,8 +167,41 @@ private final class ProcessExecution: @unchecked Sendable {
         )
     }
 
-    private func readToEnd(_ handle: FileHandle) -> Data {
-        handle.readDataToEndOfFile()
+    private func readLines(
+        from handle: FileHandle,
+        onLine: (@Sendable (String) -> Void)?
+    ) async -> Data {
+        let stream = AsyncStream<Data> { continuation in
+            handle.readabilityHandler = { fileHandle in
+                let chunk = fileHandle.availableData
+                if chunk.isEmpty {
+                    fileHandle.readabilityHandler = nil
+                    continuation.finish()
+                } else {
+                    continuation.yield(chunk)
+                }
+            }
+        }
+
+        var collected = Data()
+        var pending = Data()
+        for await chunk in stream {
+            collected.append(chunk)
+            pending.append(chunk)
+            while let newline = pending.firstIndex(of: 0x0A) {
+                let lineData = pending.prefix(upTo: newline)
+                if !lineData.isEmpty,
+                   let line = String(bytes: lineData, encoding: .utf8) {
+                    onLine?(line)
+                }
+                pending.removeSubrange(pending.startIndex...newline)
+            }
+        }
+        if !pending.isEmpty,
+           let line = String(bytes: pending, encoding: .utf8) {
+            onLine?(line)
+        }
+        return collected
     }
 
     private func terminateStalledProcess() async {
