@@ -63,6 +63,41 @@ public final class SessionExpiryStore: SessionExpiryStoring, @unchecked Sendable
     }
 }
 
+public struct SessionDurationStatistics: Equatable, Sendable {
+    public let observationCount: Int
+    public let average: TimeInterval
+    public let shortest: TimeInterval
+
+    public init(observationCount: Int, average: TimeInterval, shortest: TimeInterval) {
+        self.observationCount = observationCount
+        self.average = average
+        self.shortest = shortest
+    }
+}
+
+public extension SessionExpiryRecord {
+    var statistics: SessionDurationStatistics? {
+        guard !durations.isEmpty else {
+            return nil
+        }
+        return SessionDurationStatistics(
+            observationCount: durations.count,
+            average: durations.reduce(0, +) / Double(durations.count),
+            shortest: durations.min() ?? 0
+        )
+    }
+}
+
+public enum DurationPresentation {
+    public static func summarize(_ interval: TimeInterval) -> String {
+        let hours = interval / 3600
+        if hours >= 1 {
+            return String(format: "%.1f 小时", hours)
+        }
+        return "\(Int(interval / 60)) 分钟"
+    }
+}
+
 public struct SessionExpiryTracker: Sendable {
     private var record: SessionExpiryRecord
 

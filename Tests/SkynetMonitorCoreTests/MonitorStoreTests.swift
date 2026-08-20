@@ -357,6 +357,21 @@ final class MonitorStoreTests: XCTestCase {
         XCTAssertNil(store.sessionExpiresAt)
     }
 
+    func testStatisticsPublishFromPersistedRecordOnInit() {
+        let store = MonitorStore(
+            checker: StoreFakeChecker(results: []),
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: true),
+            notifier: StoreFakeNotifier(),
+            periodicInterval: nil,
+            sessionExpiryStore: StoreFakeSessionExpiryStore(
+                record: SessionExpiryRecord(durations: [3600, 7200])
+            )
+        )
+
+        XCTAssertEqual(store.sessionStatistics?.observationCount, 2)
+        XCTAssertEqual(store.sessionStatistics?.average ?? 0, 5400, accuracy: 1)
+    }
+
     func testCheckForUpdatesReportsNewerRelease() async {
         let store = MonitorStore(
             checker: StoreFakeChecker(results: []),

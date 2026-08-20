@@ -152,4 +152,21 @@ final class SessionExpiryTests: XCTestCase {
 
         XCTAssertEqual(store.load(), record)
     }
+
+    func testStatisticsSummarizeObservedDurations() {
+        let record = SessionExpiryRecord(durations: [3600, 7200, 10800])
+
+        let statistics = record.statistics
+
+        XCTAssertEqual(statistics?.observationCount, 3)
+        XCTAssertEqual(statistics?.average ?? 0, 7200, accuracy: 1)
+        XCTAssertEqual(statistics?.shortest, 3600)
+        XCTAssertNil(SessionExpiryRecord(durations: []).statistics)
+    }
+
+    func testDurationPresentationFormatsHoursAndMinutes() {
+        XCTAssertEqual(DurationPresentation.summarize(7200), "2.0 小时")
+        XCTAssertEqual(DurationPresentation.summarize(45 * 60), "45 分钟")
+        XCTAssertEqual(DurationPresentation.summarize(90 * 60), "1.5 小时")
+    }
 }

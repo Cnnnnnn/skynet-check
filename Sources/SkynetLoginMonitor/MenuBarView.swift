@@ -77,6 +77,12 @@ struct MenuBarView: View {
                         systemImage: "clock.badge.exclamationmark"
                     )
                 }
+                if let sessionStatistics = store.sessionStatistics {
+                    Label(
+                        "平均会话 \(DurationPresentation.summarize(sessionStatistics.average))（近 \(sessionStatistics.observationCount) 次）",
+                        systemImage: "chart.bar"
+                    )
+                }
             }
             .font(.caption)
             .foregroundStyle(.secondary)

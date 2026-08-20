@@ -17,6 +17,7 @@ public final class MonitorStore: ObservableObject {
     @Published public private(set) var updateStatus: AppUpdateStatus = .idle
     @Published public private(set) var availableUpdate: AppUpdateManifest?
     @Published public private(set) var sessionExpiresAt: Date?
+    @Published public private(set) var sessionStatistics: SessionDurationStatistics?
     @Published public private(set) var serviceTokens: [ServiceToken] = []
     @Published public private(set) var tokenValidation: [String: ServiceTokenValidationOutcome] = [:]
 
@@ -99,6 +100,7 @@ public final class MonitorStore: ObservableObject {
         if let estimatedExpiry = expiryTracker.estimatedExpiry(now: now()) {
             sessionExpiresAt = estimatedExpiry
         }
+        sessionStatistics = expiryTracker.currentRecord.statistics
     }
 
     public func start() async {
@@ -298,6 +300,7 @@ public final class MonitorStore: ObservableObject {
     private func handleSessionExpiry(_ result: LoginState, at date: Date) async {
         expiryTracker.recordState(result, at: date)
         sessionExpiryStore?.save(expiryTracker.currentRecord)
+        sessionStatistics = expiryTracker.currentRecord.statistics
 
         let estimatedExpiry = expiryTracker.estimatedExpiry(now: date)
         sessionExpiresAt = estimatedExpiry
