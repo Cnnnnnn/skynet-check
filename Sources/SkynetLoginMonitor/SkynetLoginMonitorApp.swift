@@ -43,6 +43,6 @@ struct SkynetLoginMonitorApp: App {
                 store.handleWake()
             }
         }
-        .menuBarExtraStyle(.menu)
+        .menuBarExtraStyle(.window)
     }
 }

@@ -58,6 +58,10 @@ installation commands, lets the user copy them, opens Terminal, and provides a
 - **开机启动** uses the macOS Login Items service.
 - **退出** stops monitoring and closes the app.
 
+The menu bar panel uses a compact native macOS window layout with a status
+header, account metadata, primary action buttons, and a dedicated setup card
+when the CLI is missing.
+
 ## Uninstall
 
 Turn off **开机启动** in the menu first, quit the app, and move `/Applications/Skynet Login Monitor.app` to Trash. The app does not delete or modify Skynet CLI configuration.
