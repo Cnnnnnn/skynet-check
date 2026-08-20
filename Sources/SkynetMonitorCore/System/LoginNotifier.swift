@@ -67,6 +67,29 @@ enum NotificationPermissionMapper {
     }
 }
 
+// Pure routing rules, kept outside the @MainActor class so the
+// nonisolated notification delegate can use them directly.
+enum NotificationActionRouting {
+    static let actionCategory = "skynet-login-actions"
+    static let manualCheckIdentifier = "skynet-manual-check"
+
+    // Action-category notifications (login expired / expiring, manual
+    // unauthenticated checks) default to re-login; other manual results
+    // default to a fresh check. Token notifications have no safe action.
+    static func defaultAction(
+        categoryIdentifier: String,
+        identifier: String
+    ) -> LoginNotificationAction? {
+        if categoryIdentifier == actionCategory {
+            return .login
+        }
+        if identifier == manualCheckIdentifier {
+            return .check
+        }
+        return nil
+    }
+}
+
 @MainActor
 public protocol LoginNotifying: AnyObject {
     func requestAuthorization() async
@@ -88,9 +111,7 @@ public final class LoginNotifier: NSObject, LoginNotifying,
     private static let identifier = "skynet-login-expired"
     private static let expiringIdentifier = "skynet-session-expiring"
     private static let tokenInvalidPrefix = "skynet-token-invalid"
-    private static let manualCheckIdentifier = "skynet-manual-check"
     private static let loginActionIdentifier = "skynet-login-action"
-    private static let actionCategory = "skynet-login-actions"
     private let bundle: Bundle
     private let centerProvider: @MainActor () -> UNUserNotificationCenter
     public var onAction: (@MainActor (LoginNotificationAction) -> Void)?
@@ -125,7 +146,7 @@ public final class LoginNotifier: NSObject, LoginNotifying,
         ]
         center.setNotificationCategories([
             UNNotificationCategory(
-                identifier: Self.actionCategory,
+                identifier: NotificationActionRouting.actionCategory,
                 actions: actions,
                 intentIdentifiers: [],
                 options: []
@@ -172,7 +193,7 @@ public final class LoginNotifier: NSObject, LoginNotifying,
         content.title = MonitorText.ExpiredNotification.title
         content.body = MonitorText.ExpiredNotification.body
         content.sound = .default
-        content.categoryIdentifier = Self.actionCategory
+        content.categoryIdentifier = NotificationActionRouting.actionCategory
 
         await post(
             UNNotificationRequest(
@@ -198,7 +219,7 @@ public final class LoginNotifier: NSObject, LoginNotifying,
             expiresAt: expiresAt
         )
         content.sound = .default
-        content.categoryIdentifier = Self.actionCategory
+        content.categoryIdentifier = NotificationActionRouting.actionCategory
         content.userInfo = [
             "stage": stage.rawValue,
         ]
@@ -243,14 +264,14 @@ public final class LoginNotifier: NSObject, LoginNotifying,
         content.body = notification.body
         content.sound = .default
         if state == .unauthenticated {
-            content.categoryIdentifier = Self.actionCategory
+            content.categoryIdentifier = NotificationActionRouting.actionCategory
         }
 
         // A stable identifier replaces the previous delivered notification
         // instead of piling up history in Notification Center.
         await post(
             UNNotificationRequest(
-                identifier: Self.manualCheckIdentifier,
+                identifier: NotificationActionRouting.manualCheckIdentifier,
                 content: content,
                 trigger: nil
             ),
@@ -306,9 +327,21 @@ public final class LoginNotifier: NSObject, LoginNotifying,
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
-        guard let action = LoginNotificationAction(
-            rawValue: response.actionIdentifier
-        ) else {
+        let action: LoginNotificationAction?
+        if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
+            // Tapping the notification body itself should do the most
+            // useful thing for that notification type.
+            action = NotificationActionRouting.defaultAction(
+                categoryIdentifier: response.notification.request.content
+                    .categoryIdentifier,
+                identifier: response.notification.request.identifier
+            )
+        } else {
+            action = LoginNotificationAction(
+                rawValue: response.actionIdentifier
+            )
+        }
+        guard let action else {
             return
         }
         await MainActor.run { [weak self] in

@@ -13,4 +13,40 @@ final class NotificationActionTests: XCTestCase {
         )
         XCTAssertNil(LoginNotificationAction(rawValue: "unknown"))
     }
+
+    func testDefaultTapActionMapsByNotificationKind() {
+        XCTAssertEqual(
+            NotificationActionRouting.defaultAction(
+                categoryIdentifier: "skynet-login-actions",
+                identifier: "skynet-login-expired"
+            ),
+            .login
+        )
+        XCTAssertEqual(
+            NotificationActionRouting.defaultAction(
+                categoryIdentifier: "skynet-login-actions",
+                identifier: "skynet-session-expiring"
+            ),
+            .login
+        )
+        XCTAssertEqual(
+            NotificationActionRouting.defaultAction(
+                categoryIdentifier: "",
+                identifier: "skynet-manual-check"
+            ),
+            .check
+        )
+        XCTAssertNil(
+            NotificationActionRouting.defaultAction(
+                categoryIdentifier: "",
+                identifier: "skynet-token-invalid-CONFLUENCE_TOKEN"
+            )
+        )
+        XCTAssertNil(
+            NotificationActionRouting.defaultAction(
+                categoryIdentifier: "",
+                identifier: "skynet-login-action"
+            )
+        )
+    }
 }
