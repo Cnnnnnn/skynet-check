@@ -9,7 +9,6 @@ struct MenuBarView: View {
 
     @State private var launchAtLoginEnabled: Bool
     @State private var launchAtLoginMessage: String?
-    @State private var installCommandCopied = false
 
     init(
         store: MonitorStore,
@@ -28,6 +27,7 @@ struct MenuBarView: View {
                 Image(systemName: presentation.symbolName)
                     .font(.system(size: 24, weight: .semibold))
                     .foregroundStyle(presentation.tint.color)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Skynet")
@@ -44,6 +44,8 @@ struct MenuBarView: View {
                         .controlSize(.small)
                 }
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Skynet \(presentation.title)")
 
             if let email = store.state.authenticatedEmail {
                 Label(email, systemImage: "person.crop.circle")
@@ -75,7 +77,10 @@ struct MenuBarView: View {
             Divider()
 
             if store.state == .cliMissing {
-                missingCLICard
+                MissingCLICardView(
+                    isChecking: store.isChecking,
+                    onRefresh: { Task { await store.refresh() } }
+                )
             } else {
                 HStack(spacing: 8) {
                     Button {
@@ -105,11 +110,18 @@ struct MenuBarView: View {
             }
 
             if let environmentReport = store.environmentReport {
-                environmentCard(environmentReport)
+                EnvironmentCardView(
+                    report: environmentReport,
+                    notificationPermission: store.notificationPermission,
+                    onRecheck: { Task { await store.inspectEnvironment() } }
+                )
             }
 
             if store.permissionAudit.needsRepair {
-                permissionCard
+                PermissionCardView(
+                    repairMessage: store.permissionRepairMessage,
+                    onRepair: { store.repairPermissions() }
+                )
             }
 
             Divider()
@@ -128,6 +140,7 @@ struct MenuBarView: View {
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .controlSize(.small)
+                .accessibilityLabel(Text("开机启动"))
             }
 
             HStack(spacing: 10) {
@@ -138,11 +151,15 @@ struct MenuBarView: View {
                     in: 3.0...60.0,
                     step: 1
                 )
+                .accessibilityLabel(Text("自动检查间隔"))
+                .accessibilityValue(Text("\(store.pollingIntervalMinutes) 分钟"))
                 Text("\(store.pollingIntervalMinutes) 分钟")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(width: 52, alignment: .trailing)
             }
+
+            updateCheckRow
 
             if launchAtLogin.requiresApproval {
                 Text("需要在“系统设置 → 登录项”中允许")
@@ -156,7 +173,7 @@ struct MenuBarView: View {
             }
 
             HStack {
-                Text("Skynet Login Monitor")
+                Text("Skynet Login Monitor \(appVersionText)")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                 Spacer()
@@ -173,65 +190,52 @@ struct MenuBarView: View {
         .background(.regularMaterial)
     }
 
-    private var missingCLICard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("需要先安装 Skynet CLI", systemImage: "shippingbox")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.orange)
-            Text("复制命令后粘贴到 Terminal 执行，完成后回来重新检测。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(CLIInstallGuide.combinedCommand)
-                .font(.system(.caption2, design: .monospaced))
-                .textSelection(.enabled)
-                .lineLimit(2)
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.black.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 7))
+    private var appVersionText: String {
+        guard let version = Bundle.main
+            .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+            !version.isEmpty
+        else {
+            return ""
+        }
+        return version
+    }
 
-            HStack(spacing: 8) {
-                Button("复制命令") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(
-                        CLIInstallGuide.combinedCommand,
-                        forType: .string
-                    )
-                    installCommandCopied = true
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-
-                Button("打开 Terminal") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(
-                        CLIInstallGuide.combinedCommand,
-                        forType: .string
-                    )
-                    NSWorkspace.shared.open(
-                        URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")
-                    )
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-
-                Button("重新检测") {
-                    Task { await store.refresh() }
-                }
-                .buttonStyle(.borderless)
-                .controlSize(.small)
-                .disabled(store.isChecking)
+    @ViewBuilder
+    private var updateCheckRow: some View {
+        HStack(spacing: 8) {
+            Button("检查更新") {
+                Task { await store.checkForUpdates() }
             }
+            .controlSize(.small)
+            .disabled(store.updateStatus == .checking)
 
-            if installCommandCopied {
-                Text("安装命令已复制")
+            switch store.updateStatus {
+            case .idle:
+                EmptyView()
+            case .checking:
+                ProgressView()
+                    .controlSize(.mini)
+            case .upToDate:
+                Text(MonitorText.UpdateCheck.upToDate)
                     .font(.caption2)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(.secondary)
+            case .available(let version):
+                Text("有新版本 \(version)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                if let update = store.availableUpdate {
+                    Button("前往下载") {
+                        NSWorkspace.shared.open(update.downloadURL)
+                    }
+                    .controlSize(.small)
+                    .buttonStyle(.borderedProminent)
+                }
+            case .failed:
+                Text(MonitorText.UpdateCheck.failed)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
         }
-        .padding(12)
-        .background(Color.orange.opacity(0.10))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     private var pollingIntervalBinding: Binding<Double> {
@@ -241,87 +245,6 @@ struct MenuBarView: View {
                 store.setPollingInterval(Int(value.rounded()))
             }
         )
-    }
-
-    private func environmentCard(_ report: EnvironmentReport) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack {
-                Label("环境诊断", systemImage: "stethoscope")
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
-                Button("重新检查") {
-                    Task { await store.inspectEnvironment() }
-                }
-                .buttonStyle(.borderless)
-                .font(.caption)
-            }
-            ForEach(Array(report.checks.enumerated()), id: \.offset) { _, check in
-                HStack(spacing: 6) {
-                    Image(systemName: check.status.symbolName)
-                        .foregroundStyle(check.status.color)
-                    Text(check.name)
-                        .font(.caption)
-                    Spacer()
-                    Text(check.detail)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-            if store.notificationPermission != .unsupported {
-                HStack(spacing: 6) {
-                    Image(systemName: store.notificationPermission.symbolName)
-                        .foregroundStyle(store.notificationPermission.color)
-                    Text("通知权限")
-                        .font(.caption)
-                    Spacer()
-                    Text(store.notificationPermission.detail)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                if store.notificationPermission == .denied {
-                    Button("打开系统设置开启通知") {
-                        if let url = URL(
-                            string: "x-apple.systempreferences:com.apple.Notifications-Settings"
-                        ) {
-                            NSWorkspace.shared.open(url)
-                        }
-                    }
-                    .buttonStyle(.borderless)
-                    .font(.caption)
-                }
-            }
-        }
-        .padding(10)
-        .background(Color.blue.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-    }
-
-    private var permissionCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("配置权限过宽", systemImage: "lock.trianglebadge.exclamationmark")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.orange)
-            Text("session.json 和 config.json 建议仅当前用户可读写。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            HStack {
-                Button("修复权限") {
-                    store.repairPermissions()
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                if let message = store.permissionRepairMessage {
-                    Text(message)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .padding(10)
-        .background(Color.orange.opacity(0.10))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {
@@ -349,71 +272,6 @@ private extension StatusTint {
             .red
         case .yellow:
             .yellow
-        }
-    }
-}
-
-private extension EnvironmentCheckStatus {
-    var symbolName: String {
-        switch self {
-        case .passed:
-            "checkmark.circle.fill"
-        case .warning:
-            "exclamationmark.triangle.fill"
-        case .failed:
-            "xmark.circle.fill"
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .passed:
-            .green
-        case .warning:
-            .orange
-        case .failed:
-            .red
-        }
-    }
-}
-
-private extension NotificationPermissionStatus {
-    var symbolName: String {
-        switch self {
-        case .authorized:
-            "checkmark.circle.fill"
-        case .notDetermined:
-            "exclamationmark.triangle.fill"
-        case .denied:
-            "xmark.circle.fill"
-        case .unsupported:
-            "minus.circle"
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .authorized:
-            .green
-        case .notDetermined:
-            .orange
-        case .denied:
-            .red
-        case .unsupported:
-            .secondary
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .authorized:
-            "通知已授权"
-        case .notDetermined:
-            "尚未确认授权"
-        case .denied:
-            "已被拒绝"
-        case .unsupported:
-            "当前环境不支持通知"
         }
     }
 }
