@@ -18,6 +18,7 @@ public final class MonitorStore: ObservableObject {
     private var periodicTask: Task<Void, Never>?
     private var confirmationTask: Task<Void, Never>?
     private var refreshPending = false
+    private var pendingResultNotification = false
     private var started = false
 
     public init(
@@ -50,12 +51,14 @@ public final class MonitorStore: ObservableObject {
         startPeriodicChecks()
     }
 
-    public func refresh() async {
+    public func refresh(notifyResult: Bool = false) async {
         if isChecking {
             refreshPending = true
+            pendingResultNotification = pendingResultNotification || notifyResult
             return
         }
 
+        var notifyCurrentResult = notifyResult
         repeat {
             refreshPending = false
             isChecking = true
@@ -69,6 +72,11 @@ public final class MonitorStore: ObservableObject {
             lastCheckedAt = Date()
             isChecking = false
             await handleTransition(result)
+            if notifyCurrentResult {
+                await notifier.notifyCheckResult(result)
+            }
+            notifyCurrentResult = pendingResultNotification
+            pendingResultNotification = false
         } while refreshPending
     }
 

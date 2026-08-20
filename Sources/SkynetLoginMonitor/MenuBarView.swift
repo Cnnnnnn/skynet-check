@@ -42,7 +42,7 @@ struct MenuBarView: View {
 
         Button("立即检查") {
             Task {
-                await store.refresh()
+                await store.refresh(notifyResult: true)
             }
         }
         .disabled(store.isChecking)

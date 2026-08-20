@@ -75,6 +75,41 @@ final class MonitorStoreTests: XCTestCase {
         XCTAssertEqual(checkCount, 3)
     }
 
+    func testManualRefreshNotifiesWithCompletedCheckResult() async {
+        let notifier = StoreFakeNotifier()
+        let store = MonitorStore(
+            checker: StoreFakeChecker(
+                results: [.authenticated(email: "user@example.com")]
+            ),
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: true),
+            notifier: notifier,
+            periodicInterval: nil
+        )
+
+        await store.refresh(notifyResult: true)
+
+        XCTAssertEqual(
+            notifier.manualCheckResults,
+            [.authenticated(email: "user@example.com")]
+        )
+    }
+
+    func testAutomaticRefreshDoesNotNotifyCheckResult() async {
+        let notifier = StoreFakeNotifier()
+        let store = MonitorStore(
+            checker: StoreFakeChecker(
+                results: [.authenticated(email: "user@example.com")]
+            ),
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: true),
+            notifier: notifier,
+            periodicInterval: nil
+        )
+
+        await store.refresh()
+
+        XCTAssertTrue(notifier.manualCheckResults.isEmpty)
+    }
+
     private func waitUntil(
         timeout: Duration = .seconds(1),
         condition: @escaping @MainActor () -> Bool
@@ -132,6 +167,7 @@ private final class StoreFakeNetworkMonitor: NetworkMonitoring {
 private final class StoreFakeNotifier: LoginNotifying {
     private(set) var authorizationRequestCount = 0
     private(set) var notificationCount = 0
+    private(set) var manualCheckResults: [LoginState] = []
 
     func requestAuthorization() async {
         authorizationRequestCount += 1
@@ -139,5 +175,9 @@ private final class StoreFakeNotifier: LoginNotifying {
 
     func notifyLoginExpired() async {
         notificationCount += 1
+    }
+
+    func notifyCheckResult(_ state: LoginState) async {
+        manualCheckResults.append(state)
     }
 }
