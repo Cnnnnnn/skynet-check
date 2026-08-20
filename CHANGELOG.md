@@ -3,6 +3,26 @@
 All notable changes to this project are documented in this file. Versions
 follow the newest `v*` git tag; the build number is the commit count.
 
+## [0.5.0] - 2026-08-21
+
+### Added
+
+- Service tokens that turn invalid trigger a system notification (once per
+  failure episode).
+- Panel shows observed session duration statistics ("平均会话 X 小时").
+- MCP configuration findings offer a "用 Terminal 修复" shortcut running
+  `skynet update tools`.
+- When the login flow does not finish, the panel offers an "打开登录页面"
+  button with the URL the CLI printed, as a manual fallback when no
+  browser opened.
+
+### Changed
+
+- Startup: the first login check no longer waits behind the environment
+  probes; version and diagnostics run concurrently, and the probes
+  themselves run in parallel (diagnostics now take the slowest probe, not
+  their sum).
+
 ## [0.4.0] - 2026-08-21
 
 ### Added
