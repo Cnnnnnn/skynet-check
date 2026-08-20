@@ -128,6 +128,11 @@ public enum MonitorText {
         public static let validDetail = "有效"
         public static let invalidDetail = "已失效"
         public static let unknownDetail = "未检测"
+
+        public static func invalidNotificationTitle(name: String) -> String {
+            "\(name) Token 已失效"
+        }
+        public static let invalidNotificationBody = "相关功能已不可用，请重新获取并更新 token。"
     }
 
     public enum UpdateCheck {

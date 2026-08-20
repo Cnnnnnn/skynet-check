@@ -88,6 +88,39 @@ final class ServiceTokenValidatorTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testInvalidTokenNotifiesOnceUntilItTurnsValidAgain() async {
+        let reader = StubTokenReader(tokens: [
+            ServiceToken(key: "CONFLUENCE_TOKEN", displayName: "Confluence", value: "secret"),
+        ])
+        let validator = MutableTokenValidator()
+        validator.outcome = .invalid
+        let notifier = StubNotifier()
+        let store = MonitorStore(
+            checker: StubChecker(),
+            networkMonitor: StubNetworkMonitor(),
+            notifier: notifier,
+            periodicInterval: nil,
+            serviceTokenReader: reader,
+            tokenValidator: validator
+        )
+
+        await store.inspectEnvironment()
+        await store.inspectEnvironment()
+        XCTAssertEqual(notifier.invalidTokenNotifications.count, 1)
+        XCTAssertEqual(
+            notifier.invalidTokenNotifications.first?.name,
+            "Confluence"
+        )
+
+        validator.outcome = .valid
+        await store.inspectEnvironment()
+        validator.outcome = .invalid
+        await store.inspectEnvironment()
+
+        XCTAssertEqual(notifier.invalidTokenNotifications.count, 2)
+    }
+
     func testDiagnosticsIncludeTokenValidationVerdict() {
         let report = DiagnosticsComposer.compose(
             appVersion: "0.4.0",
@@ -114,14 +147,23 @@ private struct StubTokenReader: ServiceTokenReading {
     }
 }
 
-private struct StubTokenValidator: ServiceTokenValidating {
-    let supportedKeys: Set<String> = ["CONFLUENCE_TOKEN"]
-    let outcome: ServiceTokenValidationOutcome
+    private struct StubTokenValidator: ServiceTokenValidating {
+        let supportedKeys: Set<String> = ["CONFLUENCE_TOKEN"]
+        let outcome: ServiceTokenValidationOutcome
 
-    func validate(token: ServiceToken) async -> ServiceTokenValidationOutcome {
-        outcome
+        func validate(token: ServiceToken) async -> ServiceTokenValidationOutcome {
+            outcome
+        }
     }
-}
+
+    private final class MutableTokenValidator: ServiceTokenValidating, @unchecked Sendable {
+        let supportedKeys: Set<String> = ["CONFLUENCE_TOKEN"]
+        var outcome: ServiceTokenValidationOutcome = .valid
+
+        func validate(token: ServiceToken) async -> ServiceTokenValidationOutcome {
+            outcome
+        }
+    }
 
 private struct StubChecker: SkynetAuthChecking {
     func check(networkAvailable: Bool) async -> LoginState {
@@ -148,6 +190,8 @@ private final class StubNetworkMonitor: NetworkMonitoring {
 
 @MainActor
 private final class StubNotifier: LoginNotifying {
+    private(set) var invalidTokenNotifications: [(key: String, name: String)] = []
+
     func requestAuthorization() async {}
 
     func authorizationStatus() async -> NotificationPermissionStatus {
@@ -160,6 +204,10 @@ private final class StubNotifier: LoginNotifying {
         stage: SessionExpiryAdvisor.Stage,
         expiresAt: Date
     ) async {}
+
+    func notifyServiceTokenInvalid(key: String, name: String) async {
+        invalidTokenNotifications.append((key, name))
+    }
 
     func notifyCheckResult(_ state: LoginState) async {}
 

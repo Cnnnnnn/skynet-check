@@ -120,6 +120,8 @@ private final class FakeNotifier: LoginNotifying {
 
     func notifyLoginExpired() async {}
 
+    func notifyServiceTokenInvalid(key: String, name: String) async {}
+
     func notifySessionExpiring(
         stage: SessionExpiryAdvisor.Stage,
         expiresAt: Date

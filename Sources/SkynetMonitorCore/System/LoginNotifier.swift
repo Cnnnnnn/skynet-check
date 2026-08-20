@@ -76,6 +76,7 @@ public protocol LoginNotifying: AnyObject {
         stage: SessionExpiryAdvisor.Stage,
         expiresAt: Date
     ) async
+    func notifyServiceTokenInvalid(key: String, name: String) async
     func notifyCheckResult(_ state: LoginState) async
     func notifyLoginResult(_ result: LoginActionResult) async
 }
@@ -86,6 +87,7 @@ public final class LoginNotifier: NSObject, LoginNotifying,
 {
     private static let identifier = "skynet-login-expired"
     private static let expiringIdentifier = "skynet-session-expiring"
+    private static let tokenInvalidPrefix = "skynet-token-invalid"
     private static let manualCheckIdentifier = "skynet-manual-check"
     private static let loginActionIdentifier = "skynet-login-action"
     private static let actionCategory = "skynet-login-actions"
@@ -208,6 +210,25 @@ public final class LoginNotifier: NSObject, LoginNotifying,
                 trigger: nil
             ),
             label: "session-expiring-\(stage.logLabel)"
+        )
+    }
+
+    public func notifyServiceTokenInvalid(key: String, name: String) async {
+        guard supportsUserNotifications else {
+            return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = MonitorText.ServiceToken.invalidNotificationTitle(name: name)
+        content.body = MonitorText.ServiceToken.invalidNotificationBody
+        content.sound = .default
+
+        await post(
+            UNNotificationRequest(
+                identifier: "\(Self.tokenInvalidPrefix)-\(key)",
+                content: content,
+                trigger: nil
+            ),
+            label: "token-invalid"
         )
     }
 

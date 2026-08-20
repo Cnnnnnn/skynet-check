@@ -46,6 +46,7 @@ public final class MonitorStore: ObservableObject {
     private var refreshPending = false
     private var pendingResultNotification = false
     private var started = false
+    private var notifiedInvalidTokenKeys: Set<String> = []
 
     public init(
         checker: any SkynetAuthChecking,
@@ -229,6 +230,7 @@ public final class MonitorStore: ObservableObject {
                 "loaded \(tokens.count, privacy: .public) service token(s)"
             )
             tokenValidation = await validateTokens(tokens)
+            await notifyInvalidTokensIfNeeded()
         }
         guard let environmentDoctor else {
             return
@@ -329,6 +331,33 @@ public final class MonitorStore: ObservableObject {
             environment: environmentReport,
             tokenValidation: tokenValidation
         )
+    }
+
+    // One notification per token per failure episode; a token that turns
+    // valid again re-arms the alert.
+    private func notifyInvalidTokensIfNeeded() async {
+        let tokenByName = Dictionary(
+            serviceTokens.map { ($0.key, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        for (key, outcome) in tokenValidation.sorted(by: { $0.key < $1.key }) {
+            switch outcome {
+            case .invalid:
+                guard !notifiedInvalidTokenKeys.contains(key) else {
+                    continue
+                }
+                notifiedInvalidTokenKeys.insert(key)
+                await notifier.notifyServiceTokenInvalid(
+                    key: key,
+                    name: tokenByName[key]?.displayName ?? key
+                )
+            case .valid:
+                notifiedInvalidTokenKeys.remove(key)
+            case .unknown:
+                break
+            }
+        }
     }
 
     private func validateTokens(

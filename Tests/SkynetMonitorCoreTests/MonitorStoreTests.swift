@@ -580,6 +580,7 @@ private final class StoreFakeNotifier: LoginNotifying {
     private(set) var manualCheckResults: [LoginState] = []
     private(set) var loginResults: [LoginActionResult] = []
     private(set) var expiringNotifications: [(stage: SessionExpiryAdvisor.Stage, expiresAt: Date)] = []
+    private(set) var invalidTokenNotifications: [(key: String, name: String)] = []
 
     func requestAuthorization() async {
         authorizationRequestCount += 1
@@ -591,6 +592,10 @@ private final class StoreFakeNotifier: LoginNotifying {
 
     func notifyLoginExpired() async {
         notificationCount += 1
+    }
+
+    func notifyServiceTokenInvalid(key: String, name: String) async {
+        invalidTokenNotifications.append((key, name))
     }
 
     func notifySessionExpiring(
