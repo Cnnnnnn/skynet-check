@@ -16,6 +16,7 @@ public final class MonitorStore: ObservableObject {
     @Published public private(set) var permissionRepairMessage: String?
     @Published public private(set) var updateStatus: AppUpdateStatus = .idle
     @Published public private(set) var availableUpdate: AppUpdateManifest?
+    @Published public private(set) var sessionExpiresAt: Date?
 
     private let checker: any SkynetAuthChecking
     private let networkMonitor: any NetworkMonitoring
@@ -32,6 +33,9 @@ public final class MonitorStore: ObservableObject {
 
     private var transitionTracker = LoginTransitionTracker()
     private let stateStore: (any LoginStateStoring)?
+    private let sessionExpiryStore: (any SessionExpiryStoring)?
+    private var expiryTracker: SessionExpiryTracker
+    private var expiryAdvisor = SessionExpiryAdvisor()
     private var periodicTask: Task<Void, Never>?
     private var confirmationTask: Task<Void, Never>?
     private var wakeTask: Task<Void, Never>?
@@ -50,6 +54,7 @@ public final class MonitorStore: ObservableObject {
         environmentDoctor: EnvironmentDoctor? = nil,
         permissionManager: SkynetPermissionManager = SkynetPermissionManager(),
         stateStore: (any LoginStateStoring)? = nil,
+        sessionExpiryStore: (any SessionExpiryStoring)? = nil,
         updateChecker: (any AppUpdateChecking)? = nil,
         currentAppVersion: String? = nil,
         now: @escaping @Sendable () -> Date = Date.init
@@ -65,6 +70,10 @@ public final class MonitorStore: ObservableObject {
         self.environmentDoctor = environmentDoctor
         self.permissionManager = permissionManager
         self.stateStore = stateStore
+        self.sessionExpiryStore = sessionExpiryStore
+        self.expiryTracker = SessionExpiryTracker(
+            record: sessionExpiryStore?.load() ?? SessionExpiryRecord()
+        )
         self.updateChecker = updateChecker
         self.currentAppVersion = currentAppVersion
         self.now = now
@@ -77,6 +86,9 @@ public final class MonitorStore: ObservableObject {
             lastCompletedState = snapshot.state
             lastCheckedAt = snapshot.completedAt
             MonitorLog.store.info("restored last completed check from snapshot")
+        }
+        if let estimatedExpiry = expiryTracker.estimatedExpiry(now: now()) {
+            sessionExpiresAt = estimatedExpiry
         }
     }
 
@@ -115,7 +127,7 @@ public final class MonitorStore: ObservableObject {
                 networkAvailable: networkMonitor.isAvailable
             )
 
-            complete(with: result)
+            await complete(with: result)
             MonitorLog.store.info(
                 "check completed: \(result.presentation.title, privacy: .public)"
             )
@@ -140,7 +152,7 @@ public final class MonitorStore: ObservableObject {
             networkAvailable: networkMonitor.isAvailable
         )
         let result = loginResult.state
-        complete(with: result)
+        await complete(with: result)
         MonitorLog.store.info(
             "login flow completed: \(result.presentation.title, privacy: .public)"
         )
@@ -243,7 +255,7 @@ public final class MonitorStore: ObservableObject {
         }
     }
 
-    private func complete(with result: LoginState) {
+    private func complete(with result: LoginState) async {
         let completedAt = now()
         state = result
         lastCompletedState = result
@@ -254,6 +266,44 @@ public final class MonitorStore: ObservableObject {
                 state: result.persistenceSafe,
                 completedAt: completedAt
             )
+        )
+        await handleSessionExpiry(result, at: completedAt)
+    }
+
+    private func handleSessionExpiry(_ result: LoginState, at date: Date) async {
+        expiryTracker.recordState(result, at: date)
+        sessionExpiryStore?.save(expiryTracker.currentRecord)
+
+        let estimatedExpiry = expiryTracker.estimatedExpiry(now: date)
+        sessionExpiresAt = estimatedExpiry
+
+        let sessionStartedAt = expiryTracker.currentRecord.lastAuthenticatedAt
+        if let stage = expiryAdvisor.evaluate(
+            estimatedExpiry: estimatedExpiry,
+            sessionStartedAt: sessionStartedAt,
+            now: date
+        ), let estimatedExpiry {
+            MonitorLog.store.notice(
+                "session expiry estimate crossed a threshold (\(stage.logLabel, privacy: .public))"
+            )
+            await notifier.notifySessionExpiring(
+                stage: stage,
+                expiresAt: estimatedExpiry
+            )
+        }
+    }
+
+    public func diagnosticsReport() -> String {
+        DiagnosticsComposer.compose(
+            appVersion: currentAppVersion,
+            state: state,
+            lastCheckedAt: lastCheckedAt,
+            lastCompletedState: lastCompletedState,
+            sessionExpiresAt: sessionExpiresAt,
+            pollingIntervalMinutes: pollingIntervalMinutes,
+            notificationPermission: notificationPermission,
+            permissionAudit: permissionAudit,
+            environment: environmentReport
         )
     }
 

@@ -301,6 +301,62 @@ final class MonitorStoreTests: XCTestCase {
         XCTAssertEqual(store.state, .authenticated(email: nil))
     }
 
+    func testRefreshNotifiesOnceWhenEstimatedExpiryApproaches() async {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let notifier = StoreFakeNotifier()
+        // Past sessions lasted 2h; the current one started 90 minutes ago,
+        // so the estimate sits 30 minutes out — inside the warning window.
+        let expiryStore = StoreFakeSessionExpiryStore(
+            record: SessionExpiryRecord(
+                lastAuthenticatedAt: now.addingTimeInterval(-5400),
+                durations: [7200]
+            )
+        )
+        let store = MonitorStore(
+            checker: StoreFakeChecker(
+                results: [.authenticated(email: nil), .authenticated(email: nil)]
+            ),
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: true),
+            notifier: notifier,
+            periodicInterval: nil,
+            sessionExpiryStore: expiryStore,
+            now: { now }
+        )
+
+        await store.refresh()
+        await store.refresh()
+
+        XCTAssertEqual(notifier.expiringNotifications.count, 1)
+        XCTAssertEqual(notifier.expiringNotifications.first?.stage, .warning)
+        XCTAssertEqual(
+            store.sessionExpiresAt,
+            now.addingTimeInterval(1800)
+        )
+    }
+
+    func testRefreshCapturesSessionDurationWhenExpiryDetected() async {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let expiryStore = StoreFakeSessionExpiryStore(
+            record: SessionExpiryRecord(
+                lastAuthenticatedAt: now.addingTimeInterval(-3600),
+                durations: []
+            )
+        )
+        let store = MonitorStore(
+            checker: StoreFakeChecker(results: [.unauthenticated]),
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: true),
+            notifier: StoreFakeNotifier(),
+            periodicInterval: nil,
+            sessionExpiryStore: expiryStore,
+            now: { now }
+        )
+
+        await store.refresh()
+
+        XCTAssertEqual(expiryStore.saved?.durations, [3600])
+        XCTAssertNil(store.sessionExpiresAt)
+    }
+
     func testCheckForUpdatesReportsNewerRelease() async {
         let store = MonitorStore(
             checker: StoreFakeChecker(results: []),
@@ -413,6 +469,24 @@ final class MonitorStoreTests: XCTestCase {
     }
 }
 
+private final class StoreFakeSessionExpiryStore: SessionExpiryStoring, @unchecked Sendable {
+    var record: SessionExpiryRecord?
+    private(set) var saved: SessionExpiryRecord?
+
+    init(record: SessionExpiryRecord? = nil) {
+        self.record = record
+    }
+
+    func load() -> SessionExpiryRecord? {
+        record
+    }
+
+    func save(_ record: SessionExpiryRecord) {
+        self.record = record
+        saved = record
+    }
+}
+
 private struct StoreFakeUpdateChecker: AppUpdateChecking {
     private let manifest: AppUpdateManifest?
     private let error: Error?
@@ -505,6 +579,7 @@ private final class StoreFakeNotifier: LoginNotifying {
     private(set) var notificationCount = 0
     private(set) var manualCheckResults: [LoginState] = []
     private(set) var loginResults: [LoginActionResult] = []
+    private(set) var expiringNotifications: [(stage: SessionExpiryAdvisor.Stage, expiresAt: Date)] = []
 
     func requestAuthorization() async {
         authorizationRequestCount += 1
@@ -516,6 +591,13 @@ private final class StoreFakeNotifier: LoginNotifying {
 
     func notifyLoginExpired() async {
         notificationCount += 1
+    }
+
+    func notifySessionExpiring(
+        stage: SessionExpiryAdvisor.Stage,
+        expiresAt: Date
+    ) async {
+        expiringNotifications.append((stage, expiresAt))
     }
 
     func notifyCheckResult(_ state: LoginState) async {

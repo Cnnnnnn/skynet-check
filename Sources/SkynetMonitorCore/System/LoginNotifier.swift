@@ -72,6 +72,10 @@ public protocol LoginNotifying: AnyObject {
     func requestAuthorization() async
     func authorizationStatus() async -> NotificationPermissionStatus
     func notifyLoginExpired() async
+    func notifySessionExpiring(
+        stage: SessionExpiryAdvisor.Stage,
+        expiresAt: Date
+    ) async
     func notifyCheckResult(_ state: LoginState) async
     func notifyLoginResult(_ result: LoginActionResult) async
 }
@@ -81,6 +85,7 @@ public final class LoginNotifier: NSObject, LoginNotifying,
     UNUserNotificationCenterDelegate
 {
     private static let identifier = "skynet-login-expired"
+    private static let expiringIdentifier = "skynet-session-expiring"
     private static let manualCheckIdentifier = "skynet-manual-check"
     private static let loginActionIdentifier = "skynet-login-action"
     private static let actionCategory = "skynet-login-actions"
@@ -174,6 +179,35 @@ public final class LoginNotifier: NSObject, LoginNotifying,
                 trigger: nil
             ),
             label: "login-expired"
+        )
+    }
+
+    public func notifySessionExpiring(
+        stage: SessionExpiryAdvisor.Stage,
+        expiresAt: Date
+    ) async {
+        guard supportsUserNotifications else {
+            return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = MonitorText.ExpiringNotification.title(stage: stage)
+        content.body = MonitorText.ExpiringNotification.body(
+            stage: stage,
+            expiresAt: expiresAt
+        )
+        content.sound = .default
+        content.categoryIdentifier = Self.actionCategory
+        content.userInfo = [
+            "stage": stage.rawValue,
+        ]
+
+        await post(
+            UNNotificationRequest(
+                identifier: Self.expiringIdentifier,
+                content: content,
+                trigger: nil
+            ),
+            label: "session-expiring-\(stage.logLabel)"
         )
     }
 

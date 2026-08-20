@@ -1,3 +1,5 @@
+import Foundation
+
 // Central home for user-facing text so translations or wording changes
 // have a single place to start from. Keep values in Chinese; the panel and
 // notifications are Chinese-first by design.
@@ -15,6 +17,27 @@ public enum MonitorText {
     public enum ExpiredNotification {
         public static let title = "Skynet 登录已失效"
         public static let body = "请重新登录，以免 CLI 任务执行时中断。"
+    }
+
+    public enum ExpiringNotification {
+        public static func title(stage: SessionExpiryAdvisor.Stage) -> String {
+            switch stage {
+            case .warning:
+                return "Skynet 登录即将过期"
+            case .urgent:
+                return "Skynet 登录马上过期"
+            }
+        }
+
+        public static func body(stage: SessionExpiryAdvisor.Stage, expiresAt: Date) -> String {
+            let time = expiresAt.formatted(date: .omitted, time: .shortened)
+            switch stage {
+            case .warning:
+                return "预计 \(time) 过期，建议尽快重新登录。"
+            case .urgent:
+                return "预计 \(time) 过期，请立即重新登录。"
+            }
+        }
     }
 
     public enum NotificationAction {
