@@ -48,7 +48,9 @@ The app checks on launch, every 15 minutes, after wake, and after network recove
 - **立即检查** runs an immediate status check and sends a macOS notification
   with the completed result. Automatic checks stay silent unless login expiry
   is confirmed.
-- **重新登录** runs `skynet auth login` and checks again after it completes.
+- **重新登录** first checks the current session. An already-valid session
+  produces a “无需重新登录” notification; an invalid session opens the Skynet
+  browser login flow and reports the completed result.
 - **开机启动** uses the macOS Login Items service.
 - **退出** stops monitoring and closes the app.
 

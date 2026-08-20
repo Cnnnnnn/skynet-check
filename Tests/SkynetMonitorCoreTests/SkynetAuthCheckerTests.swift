@@ -47,19 +47,49 @@ final class SkynetAuthCheckerTests: XCTestCase {
         XCTAssertEqual(state, .offline)
     }
 
-    func testLoginRunsLoginThenChecksStatus() async throws {
+    func testLoginReturnsAlreadyAuthenticatedWithoutStartingLoginCommand() async {
         let runner = RecordingCommandRunner(results: [
+            .init(
+                stdout: "认证状态: 已认证\n用户邮箱: user@example.com",
+                stderr: "",
+                exitCode: 0,
+                timedOut: false
+            ),
+        ])
+        let checker = makeChecker(runner: runner)
+
+        let result = await checker.login(networkAvailable: true)
+        let invocations = await runner.invocations
+
+        XCTAssertEqual(
+            result,
+            .alreadyAuthenticated(email: "user@example.com")
+        )
+        XCTAssertEqual(invocations.map(\.arguments), [["auth", "status"]])
+    }
+
+    func testLoginRunsLoginForUnauthenticatedSessionThenChecksStatus() async {
+        let runner = RecordingCommandRunner(results: [
+            .init(
+                stdout: "使用 'skynet auth login' 进行登录",
+                stderr: "",
+                exitCode: 0,
+                timedOut: false
+            ),
             .init(stdout: "login complete", stderr: "", exitCode: 0, timedOut: false),
             .init(stdout: "认证状态: 已认证", stderr: "", exitCode: 0, timedOut: false),
         ])
         let checker = makeChecker(runner: runner)
 
-        let state = await checker.login(networkAvailable: true)
+        let result = await checker.login(networkAvailable: true)
 
-        XCTAssertEqual(state, .authenticated(email: nil))
+        XCTAssertEqual(result, .completed(.authenticated(email: nil)))
         let invocations = await runner.invocations
-        XCTAssertEqual(invocations.map(\.arguments), [["auth", "login"], ["auth", "status"]])
-        XCTAssertEqual(invocations.first?.timeout, .seconds(60))
+        XCTAssertEqual(
+            invocations.map(\.arguments),
+            [["auth", "status"], ["auth", "login"], ["auth", "status"]]
+        )
+        XCTAssertEqual(invocations[1].timeout, .seconds(60))
     }
 
     func testReadsTrimmedCLIVersion() async {

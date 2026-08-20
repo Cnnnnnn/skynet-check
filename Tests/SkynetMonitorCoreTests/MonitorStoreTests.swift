@@ -110,6 +110,45 @@ final class MonitorStoreTests: XCTestCase {
         XCTAssertTrue(notifier.manualCheckResults.isEmpty)
     }
 
+    func testLoginNotifiesWhenSessionIsAlreadyAuthenticated() async {
+        let notifier = StoreFakeNotifier()
+        let store = MonitorStore(
+            checker: StoreFakeChecker(
+                results: [],
+                loginResult: .alreadyAuthenticated(email: "user@example.com")
+            ),
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: true),
+            notifier: notifier,
+            periodicInterval: nil
+        )
+
+        await store.login()
+
+        XCTAssertEqual(
+            notifier.loginResults,
+            [.alreadyAuthenticated(email: "user@example.com")]
+        )
+        XCTAssertEqual(store.state, .authenticated(email: "user@example.com"))
+    }
+
+    func testLoginNotifiesCompletedFailure() async {
+        let notifier = StoreFakeNotifier()
+        let store = MonitorStore(
+            checker: StoreFakeChecker(
+                results: [],
+                loginResult: .completed(.offline)
+            ),
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: false),
+            notifier: notifier,
+            periodicInterval: nil
+        )
+
+        await store.login()
+
+        XCTAssertEqual(notifier.loginResults, [.completed(.offline)])
+        XCTAssertEqual(store.state, .offline)
+    }
+
     private func waitUntil(
         timeout: Duration = .seconds(1),
         condition: @escaping @MainActor () -> Bool
@@ -125,11 +164,17 @@ final class MonitorStoreTests: XCTestCase {
 private actor StoreFakeChecker: SkynetAuthChecking {
     private var results: [LoginState]
     private let delay: Duration
+    private let loginResult: LoginActionResult?
     private(set) var checkCount = 0
 
-    init(results: [LoginState], delay: Duration = .zero) {
+    init(
+        results: [LoginState],
+        delay: Duration = .zero,
+        loginResult: LoginActionResult? = nil
+    ) {
         self.results = results
         self.delay = delay
+        self.loginResult = loginResult
     }
 
     func check(networkAvailable: Bool) async -> LoginState {
@@ -138,8 +183,11 @@ private actor StoreFakeChecker: SkynetAuthChecking {
         return results.removeFirst()
     }
 
-    func login(networkAvailable: Bool) async -> LoginState {
-        await check(networkAvailable: networkAvailable)
+    func login(networkAvailable: Bool) async -> LoginActionResult {
+        if let loginResult {
+            return loginResult
+        }
+        return .completed(await check(networkAvailable: networkAvailable))
     }
 
     func version() async -> String? {
@@ -168,6 +216,7 @@ private final class StoreFakeNotifier: LoginNotifying {
     private(set) var authorizationRequestCount = 0
     private(set) var notificationCount = 0
     private(set) var manualCheckResults: [LoginState] = []
+    private(set) var loginResults: [LoginActionResult] = []
 
     func requestAuthorization() async {
         authorizationRequestCount += 1
@@ -179,5 +228,9 @@ private final class StoreFakeNotifier: LoginNotifying {
 
     func notifyCheckResult(_ state: LoginState) async {
         manualCheckResults.append(state)
+    }
+
+    func notifyLoginResult(_ result: LoginActionResult) async {
+        loginResults.append(result)
     }
 }

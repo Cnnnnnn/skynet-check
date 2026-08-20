@@ -88,13 +88,15 @@ public final class MonitorStore: ObservableObject {
 
         isChecking = true
         state = .checking
-        let result = await checker.login(
+        let loginResult = await checker.login(
             networkAvailable: networkMonitor.isAvailable
         )
+        let result = loginResult.state
         state = result
         lastCheckedAt = Date()
         isChecking = false
         await handleTransition(result)
+        await notifier.notifyLoginResult(loginResult)
     }
 
     public func handleWake() {

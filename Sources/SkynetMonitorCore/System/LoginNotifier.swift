@@ -23,6 +23,7 @@ public protocol LoginNotifying: AnyObject {
     func requestAuthorization() async
     func notifyLoginExpired() async
     func notifyCheckResult(_ state: LoginState) async
+    func notifyLoginResult(_ result: LoginActionResult) async
 }
 
 @MainActor
@@ -88,6 +89,25 @@ public final class LoginNotifier: NSObject, LoginNotifying,
 
         let request = UNNotificationRequest(
             identifier: "skynet-manual-check-\(UUID().uuidString)",
+            content: content,
+            trigger: nil
+        )
+        try? await center.add(request)
+    }
+
+    public func notifyLoginResult(_ result: LoginActionResult) async {
+        guard supportsUserNotifications else {
+            return
+        }
+        let center = configuredCenter()
+        let notification = result.notification
+        let content = UNMutableNotificationContent()
+        content.title = notification.title
+        content.body = notification.body
+        content.sound = .default
+
+        let request = UNNotificationRequest(
+            identifier: "skynet-login-action-\(UUID().uuidString)",
             content: content,
             trigger: nil
         )

@@ -2,7 +2,7 @@ import Foundation
 
 public protocol SkynetAuthChecking: Sendable {
     func check(networkAvailable: Bool) async -> LoginState
-    func login(networkAvailable: Bool) async -> LoginState
+    func login(networkAvailable: Bool) async -> LoginActionResult
     func version() async -> String?
 }
 
@@ -55,9 +55,17 @@ public actor SkynetAuthChecker: SkynetAuthChecking {
         return state
     }
 
-    public func login(networkAvailable: Bool) async -> LoginState {
+    public func login(networkAvailable: Bool) async -> LoginActionResult {
+        let currentState = await check(networkAvailable: networkAvailable)
+        if case let .authenticated(email) = currentState {
+            return .alreadyAuthenticated(email: email)
+        }
+        guard currentState == .unauthenticated else {
+            return .completed(currentState)
+        }
+
         guard let executableURL = try? await locator.locate() else {
-            return .cliMissing
+            return .completed(.cliMissing)
         }
 
         let result = await runner.run(
@@ -68,13 +76,17 @@ public actor SkynetAuthChecker: SkynetAuthChecking {
         )
 
         if !networkAvailable && (result.timedOut || result.exitCode != 0) {
-            return .offline
+            return .completed(.offline)
         }
         guard !result.timedOut, result.exitCode == 0 else {
-            return .serviceError(message: "Skynet login failed")
+            return .completed(
+                .serviceError(message: "Skynet login failed")
+            )
         }
 
-        return await check(networkAvailable: networkAvailable)
+        return .completed(
+            await check(networkAvailable: networkAvailable)
+        )
     }
 
     public func version() async -> String? {
