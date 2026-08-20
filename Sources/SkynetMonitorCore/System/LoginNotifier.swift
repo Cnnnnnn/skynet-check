@@ -1,4 +1,15 @@
+import Foundation
 import UserNotifications
+
+enum NotificationEnvironment {
+    static func supportsUserNotifications(
+        bundleURL: URL,
+        bundleIdentifier: String?
+    ) -> Bool {
+        bundleURL.pathExtension.lowercased() == "app"
+            && bundleIdentifier?.isEmpty == false
+    }
+}
 
 @MainActor
 public protocol LoginNotifying: AnyObject {
@@ -9,17 +20,32 @@ public protocol LoginNotifying: AnyObject {
 @MainActor
 public final class LoginNotifier: LoginNotifying {
     private static let identifier = "skynet-login-expired"
-    private let center: UNUserNotificationCenter
+    private let bundle: Bundle
+    private let centerProvider: @MainActor () -> UNUserNotificationCenter
 
-    public init(center: UNUserNotificationCenter = .current()) {
-        self.center = center
+    public init(
+        bundle: Bundle = .main,
+        centerProvider: @escaping @MainActor () -> UNUserNotificationCenter = {
+            .current()
+        }
+    ) {
+        self.bundle = bundle
+        self.centerProvider = centerProvider
     }
 
     public func requestAuthorization() async {
+        guard supportsUserNotifications else {
+            return
+        }
+        let center = centerProvider()
         _ = try? await center.requestAuthorization(options: [.alert, .sound])
     }
 
     public func notifyLoginExpired() async {
+        guard supportsUserNotifications else {
+            return
+        }
+        let center = centerProvider()
         center.removePendingNotificationRequests(
             withIdentifiers: [Self.identifier]
         )
@@ -35,5 +61,12 @@ public final class LoginNotifier: LoginNotifying {
             trigger: nil
         )
         try? await center.add(request)
+    }
+
+    private var supportsUserNotifications: Bool {
+        NotificationEnvironment.supportsUserNotifications(
+            bundleURL: bundle.bundleURL,
+            bundleIdentifier: bundle.bundleIdentifier
+        )
     }
 }
