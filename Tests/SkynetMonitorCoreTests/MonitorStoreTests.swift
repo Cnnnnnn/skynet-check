@@ -246,6 +246,87 @@ final class MonitorStoreTests: XCTestCase {
         )
     }
 
+    func testTwoManualUnauthenticatedChecksConfirmExpiryNotification() async {
+        let notifier = StoreFakeNotifier()
+        let store = MonitorStore(
+            checker: StoreFakeChecker(
+                results: [.unauthenticated, .unauthenticated]
+            ),
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: true),
+            notifier: notifier,
+            periodicInterval: nil,
+            confirmationDelay: .seconds(300)
+        )
+
+        await store.refresh(notifyResult: true)
+        await store.refresh(notifyResult: true)
+
+        // Manual checks advance the confirmation counter just like the
+        // scheduled 30-second recheck; see LoginTransitionTracker.
+        XCTAssertEqual(notifier.notificationCount, 1)
+    }
+
+    func testCheckForUpdatesReportsNewerRelease() async {
+        let store = MonitorStore(
+            checker: StoreFakeChecker(results: []),
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: true),
+            notifier: StoreFakeNotifier(),
+            periodicInterval: nil,
+            updateChecker: StoreFakeUpdateChecker(
+                manifest: AppUpdateManifest(
+                    version: "0.3.0",
+                    downloadURL: URL(string: "https://example.internal/m.dmg")!
+                )
+            ),
+            currentAppVersion: "0.2.0"
+        )
+
+        await store.checkForUpdates()
+
+        XCTAssertEqual(store.updateStatus, .available(version: "0.3.0"))
+        XCTAssertEqual(store.availableUpdate?.version, "0.3.0")
+    }
+
+    func testCheckForUpdatesReportsUpToDate() async {
+        let store = MonitorStore(
+            checker: StoreFakeChecker(results: []),
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: true),
+            notifier: StoreFakeNotifier(),
+            periodicInterval: nil,
+            updateChecker: StoreFakeUpdateChecker(
+                manifest: AppUpdateManifest(
+                    version: "0.2.0",
+                    downloadURL: URL(string: "https://example.internal/m.dmg")!
+                )
+            ),
+            currentAppVersion: "0.2.0"
+        )
+
+        await store.checkForUpdates()
+
+        XCTAssertEqual(
+            store.updateStatus,
+            .upToDate(currentVersion: "0.2.0")
+        )
+        XCTAssertNil(store.availableUpdate)
+    }
+
+    func testCheckForUpdatesReportsFailure() async {
+        let store = MonitorStore(
+            checker: StoreFakeChecker(results: []),
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: true),
+            notifier: StoreFakeNotifier(),
+            periodicInterval: nil,
+            updateChecker: StoreFakeUpdateChecker(error: URLError(.badURL)),
+            currentAppVersion: "0.2.0"
+        )
+
+        await store.checkForUpdates()
+
+        XCTAssertEqual(store.updateStatus, .failed)
+        XCTAssertNil(store.availableUpdate)
+    }
+
     func testLoginNotifiesWhenSessionIsAlreadyAuthenticated() async {
         let notifier = StoreFakeNotifier()
         let store = MonitorStore(
@@ -294,6 +375,28 @@ final class MonitorStoreTests: XCTestCase {
         while !condition(), clock.now < deadline {
             await Task.yield()
         }
+    }
+}
+
+private struct StoreFakeUpdateChecker: AppUpdateChecking {
+    private let manifest: AppUpdateManifest?
+    private let error: Error?
+
+    init(manifest: AppUpdateManifest) {
+        self.manifest = manifest
+        self.error = nil
+    }
+
+    init(error: Error) {
+        self.manifest = nil
+        self.error = error
+    }
+
+    func latestRelease() async throws -> AppUpdateManifest {
+        if let error {
+            throw error
+        }
+        return manifest!
     }
 }
 

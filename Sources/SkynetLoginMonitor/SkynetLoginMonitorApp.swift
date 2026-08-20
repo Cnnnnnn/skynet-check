@@ -22,7 +22,12 @@ struct SkynetLoginMonitorApp: App {
                 checker: checker,
                 runner: runner
             ),
-            stateStore: LoginStateStore()
+            stateStore: LoginStateStore(),
+            updateChecker: HTTPAppUpdateChecker(
+                manifestURL: AppConfiguration.updateManifestURL
+            ),
+            currentAppVersion: Bundle.main
+                .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         )
         notifier.onAction = { [weak monitorStore] action in
             Task { @MainActor in

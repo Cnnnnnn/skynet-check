@@ -14,6 +14,8 @@ public final class MonitorStore: ObservableObject {
     @Published public private(set) var notificationPermission: NotificationPermissionStatus = .unsupported
     @Published public private(set) var permissionAudit: SkynetPermissionAudit
     @Published public private(set) var permissionRepairMessage: String?
+    @Published public private(set) var updateStatus: AppUpdateStatus = .idle
+    @Published public private(set) var availableUpdate: AppUpdateManifest?
 
     private let checker: any SkynetAuthChecking
     private let networkMonitor: any NetworkMonitoring
@@ -22,6 +24,8 @@ public final class MonitorStore: ObservableObject {
     private let pollingInterval: PollingInterval
     private let environmentDoctor: EnvironmentDoctor?
     private let permissionManager: SkynetPermissionManager
+    private let updateChecker: (any AppUpdateChecking)?
+    private let currentAppVersion: String?
     private let confirmationDelay: Duration
     private let now: @Sendable () -> Date
 
@@ -43,6 +47,8 @@ public final class MonitorStore: ObservableObject {
         environmentDoctor: EnvironmentDoctor? = nil,
         permissionManager: SkynetPermissionManager = SkynetPermissionManager(),
         stateStore: (any LoginStateStoring)? = nil,
+        updateChecker: (any AppUpdateChecking)? = nil,
+        currentAppVersion: String? = nil,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.checker = checker
@@ -55,6 +61,8 @@ public final class MonitorStore: ObservableObject {
         self.environmentDoctor = environmentDoctor
         self.permissionManager = permissionManager
         self.stateStore = stateStore
+        self.updateChecker = updateChecker
+        self.currentAppVersion = currentAppVersion
         self.now = now
         self.permissionAudit = permissionManager.audit()
 
@@ -185,9 +193,38 @@ public final class MonitorStore: ObservableObject {
         do {
             try permissionManager.repair()
             permissionAudit = permissionManager.audit()
-            permissionRepairMessage = "权限已修复"
+            permissionRepairMessage = MonitorText.Permission.repaired
         } catch {
-            permissionRepairMessage = "权限修复失败"
+            permissionRepairMessage = MonitorText.Permission.repairFailed
+        }
+    }
+
+    public func checkForUpdates() async {
+        guard let updateChecker else {
+            return
+        }
+        updateStatus = .checking
+        do {
+            let manifest = try await updateChecker.latestRelease()
+            let status = AppUpdateEvaluator.evaluate(
+                currentVersion: currentAppVersion ?? "",
+                manifest: manifest
+            )
+            updateStatus = status
+            if case .available = status {
+                availableUpdate = manifest
+            } else {
+                availableUpdate = nil
+            }
+            MonitorLog.store.info(
+                "update check finished: \(status.logLabel, privacy: .public)"
+            )
+        } catch {
+            updateStatus = .failed
+            availableUpdate = nil
+            MonitorLog.store.error(
+                "update check failed: \(error.localizedDescription, privacy: .public)"
+            )
         }
     }
 
