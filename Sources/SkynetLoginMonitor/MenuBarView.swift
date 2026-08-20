@@ -9,6 +9,7 @@ struct MenuBarView: View {
 
     @State private var launchAtLoginEnabled: Bool
     @State private var launchAtLoginMessage: String?
+    @State private var diagnosticsCopied = false
 
     init(
         store: MonitorStore,
@@ -68,6 +69,12 @@ struct MenuBarView: View {
                     Label(
                         "下次自动检查：\(nextAutomaticCheckAt.formatted(date: .omitted, time: .shortened))",
                         systemImage: "timer"
+                    )
+                }
+                if let sessionExpiresAt = store.sessionExpiresAt {
+                    Label(
+                        "预计过期：\(sessionExpiresAt.formatted(date: .omitted, time: .shortened))",
+                        systemImage: "clock.badge.exclamationmark"
                     )
                 }
             }
@@ -177,6 +184,11 @@ struct MenuBarView: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                 Spacer()
+                Button(diagnosticsCopied ? "已复制" : "复制诊断") {
+                    copyDiagnostics()
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
                 Button("退出") {
                     store.stop()
                     NSApplication.shared.terminate(nil)
@@ -245,6 +257,15 @@ struct MenuBarView: View {
                 store.setPollingInterval(Int(value.rounded()))
             }
         )
+    }
+
+    private func copyDiagnostics() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(
+            store.diagnosticsReport(),
+            forType: .string
+        )
+        diagnosticsCopied = true
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {
