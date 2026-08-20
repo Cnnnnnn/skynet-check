@@ -3,6 +3,25 @@
 All notable changes to this project are documented in this file. Versions
 follow the newest `v*` git tag; the build number is the commit count.
 
+## [Unreleased]
+
+### Added
+
+- In-app "检查更新" support: compares the installed version against a
+  team-hosted manifest and links to the DMG when a newer release exists
+  (manifest URL must be configured in `AppConfiguration`).
+
+### Changed
+
+- Menu panel split into focused card views; environment diagnostics is
+  collapsed by default behind a disclosure group.
+- User-facing text centralized in `MonitorText`.
+- Notifications reuse stable identifiers so history no longer piles up in
+  Notification Center.
+- Documented that manual checks advance the expiry confirmation counter.
+- Accessibility labels on panel controls.
+- SwiftLint baseline configuration.
+
 ## [0.2.0] - 2026-08-21
 
 ### Added

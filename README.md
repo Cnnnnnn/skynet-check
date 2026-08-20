@@ -75,6 +75,10 @@ installation commands, lets the user copy them, opens Terminal, and provides a
   produces a “无需重新登录” notification; an invalid session opens the Skynet
   browser login flow and reports the completed result.
 - **开机启动** uses the macOS Login Items service.
+- **检查更新** compares the installed version against a team-hosted
+  manifest (`AppConfiguration.updateManifestURL`) and opens the DMG download
+  page when a newer release exists. Until the real manifest URL is configured,
+  the check reports a failure instead of a false result.
 - **退出** stops monitoring and closes the app.
 
 The menu bar panel uses a compact native macOS window layout with a status

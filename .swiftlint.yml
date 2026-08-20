@@ -1,0 +1,26 @@
+# Baseline SwiftLint configuration matching the existing code style.
+# Install SwiftLint (brew install swiftlint) and run `swiftlint` to check.
+
+included:
+  - Sources
+  - Tests
+
+line_length:
+  warning: 120
+  error: 160
+
+function_body_length:
+  warning: 80
+
+type_body_length:
+  warning: 300
+
+disabled_rules:
+  - todo
+  - identifier_name
+  - multiple_closures_with_trailing_closure
+  - nesting
+
+opt_in_rules:
+  - empty_count
+  - first_where
