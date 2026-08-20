@@ -19,6 +19,8 @@ public final class MonitorStore: ObservableObject {
     @Published public private(set) var sessionExpiresAt: Date?
     @Published public private(set) var sessionStatistics: SessionDurationStatistics?
     @Published public private(set) var loginURL: URL?
+    @Published public private(set) var checkDurations = CheckDurationStats()
+    @Published public private(set) var skynetConfig: SkynetConfigSummary?
     @Published public private(set) var serviceTokens: [ServiceToken] = []
     @Published public private(set) var tokenValidation: [String: ServiceTokenValidationOutcome] = [:]
 
@@ -40,6 +42,7 @@ public final class MonitorStore: ObservableObject {
     private let sessionExpiryStore: (any SessionExpiryStoring)?
     private let serviceTokenReader: (any ServiceTokenReading)?
     private let tokenValidator: (any ServiceTokenValidating)?
+    private let configReader: SkynetConfigReader?
     private var expiryTracker: SessionExpiryTracker
     private var expiryAdvisor = SessionExpiryAdvisor()
     private var periodicTask: Task<Void, Never>?
@@ -64,6 +67,7 @@ public final class MonitorStore: ObservableObject {
         sessionExpiryStore: (any SessionExpiryStoring)? = nil,
         serviceTokenReader: (any ServiceTokenReading)? = nil,
         tokenValidator: (any ServiceTokenValidating)? = nil,
+        configReader: SkynetConfigReader? = nil,
         updateChecker: (any AppUpdateChecking)? = nil,
         currentAppVersion: String? = nil,
         now: @escaping @Sendable () -> Date = Date.init
@@ -82,6 +86,7 @@ public final class MonitorStore: ObservableObject {
         self.sessionExpiryStore = sessionExpiryStore
         self.serviceTokenReader = serviceTokenReader
         self.tokenValidator = tokenValidator
+        self.configReader = configReader
         self.expiryTracker = SessionExpiryTracker(
             record: sessionExpiryStore?.load() ?? SessionExpiryRecord()
         )
@@ -110,7 +115,13 @@ public final class MonitorStore: ObservableObject {
         }
         started = true
 
-        await notifier.requestAuthorization()
+        // Authorization shows a system prompt that blocks until the user
+        // answers; keep it off the critical path so the first check and
+        // network monitoring never wait behind the dialog.
+        Task { [notifier] in
+            await notifier.requestAuthorization()
+        }
+
         await networkMonitor.start { [weak self] available in
             self?.handleNetworkChange(available: available)
         }
@@ -140,8 +151,12 @@ public final class MonitorStore: ObservableObject {
             isChecking = true
             state = .checking
 
+            let checkStartedAt = Date()
             let result = await checker.check(
                 networkAvailable: networkMonitor.isAvailable
+            )
+            checkDurations.record(
+                Date().timeIntervalSince(checkStartedAt)
             )
 
             await complete(with: result)
@@ -166,7 +181,15 @@ public final class MonitorStore: ObservableObject {
         isChecking = true
         state = .checking
         let loginResult = await checker.login(
-            networkAvailable: networkMonitor.isAvailable
+            networkAvailable: networkMonitor.isAvailable,
+            onLoginURL: { [weak self] url in
+                // The URL is printed as soon as the login command starts;
+                // show the manual-fallback button right away instead of
+                // waiting for the whole (possibly stalled) flow.
+                Task { @MainActor [weak self] in
+                    self?.loginURL = url
+                }
+            }
         )
         let result = loginResult.state
         await complete(with: result)
@@ -237,6 +260,9 @@ public final class MonitorStore: ObservableObject {
             )
             tokenValidation = await validateTokens(tokens)
             await notifyInvalidTokensIfNeeded()
+        }
+        if let configReader {
+            skynetConfig = configReader.read()
         }
         guard let environmentDoctor else {
             return
@@ -336,8 +362,24 @@ public final class MonitorStore: ObservableObject {
             notificationPermission: notificationPermission,
             permissionAudit: permissionAudit,
             environment: environmentReport,
-            tokenValidation: tokenValidation
+            tokenValidation: tokenValidation,
+            checkDurations: checkDurations,
+            skynetConfig: skynetConfig
         )
+    }
+
+    public func resetSessionStatistics() {
+        // Keep the current login period; only forget the observed durations
+        // so a corrupted sample no longer skews the expiry estimate.
+        expiryTracker = SessionExpiryTracker(
+            record: SessionExpiryRecord(
+                lastAuthenticatedAt: expiryTracker.currentRecord.lastAuthenticatedAt
+            )
+        )
+        sessionExpiryStore?.save(expiryTracker.currentRecord)
+        sessionStatistics = nil
+        sessionExpiresAt = expiryTracker.estimatedExpiry(now: now())
+        MonitorLog.store.info("session duration statistics reset")
     }
 
     // One notification per token per failure episode; a token that turns

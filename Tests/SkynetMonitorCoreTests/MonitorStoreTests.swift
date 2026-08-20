@@ -18,12 +18,12 @@ final class MonitorStoreTests: XCTestCase {
 
         await store.start()
         let checkCount = await checker.checkCount
+        await waitUntil { notifier.authorizationRequestCount == 1 }
 
         XCTAssertEqual(store.state, .authenticated(email: "user@example.com"))
         XCTAssertEqual(store.cliVersion, "2.7.29")
         XCTAssertNotNil(store.lastCheckedAt)
         XCTAssertEqual(network.startCount, 1)
-        XCTAssertEqual(notifier.authorizationRequestCount, 1)
         XCTAssertEqual(checkCount, 1)
     }
 
@@ -370,6 +370,32 @@ final class MonitorStoreTests: XCTestCase {
 
         XCTAssertEqual(store.sessionStatistics?.observationCount, 2)
         XCTAssertEqual(store.sessionStatistics?.average ?? 0, 5400, accuracy: 1)
+    }
+
+    func testResetSessionStatisticsClearsDurationsButKeepsCurrentSession() {
+        let expiryStore = StoreFakeSessionExpiryStore(
+            record: SessionExpiryRecord(
+                lastAuthenticatedAt: Date(timeIntervalSince1970: 1_700_000_000),
+                durations: [3600, 7200]
+            )
+        )
+        let store = MonitorStore(
+            checker: StoreFakeChecker(results: []),
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: true),
+            notifier: StoreFakeNotifier(),
+            periodicInterval: nil,
+            sessionExpiryStore: expiryStore
+        )
+
+        store.resetSessionStatistics()
+
+        XCTAssertNil(store.sessionStatistics)
+        XCTAssertNil(store.sessionExpiresAt)
+        XCTAssertEqual(
+            expiryStore.saved?.lastAuthenticatedAt,
+            Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        XCTAssertEqual(expiryStore.saved?.durations, [])
     }
 
     func testCheckForUpdatesReportsNewerRelease() async {
