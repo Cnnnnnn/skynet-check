@@ -3,7 +3,7 @@
 All notable changes to this project are documented in this file. Versions
 follow the newest `v*` git tag; the build number is the commit count.
 
-## [Unreleased]
+## [0.4.0] - 2026-08-21
 
 ### Added
 
@@ -16,7 +16,9 @@ follow the newest `v*` git tag; the build number is the commit count.
 - "复制诊断" button producing a plain-text diagnostics report.
 - Service token card: Confluence (and other future service) tokens stored
   by the CLI can be copied from the panel; values are masked on screen and
-  kept out of logs, diagnostics, and persistence.
+  kept out of logs, diagnostics, and persistence. The Confluence token is
+  validated against the REST API during diagnostics (valid / expired /
+  unknown badge and diagnostics line).
 
 ## [0.3.0] - 2026-08-21
 
