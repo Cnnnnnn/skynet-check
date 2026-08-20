@@ -8,8 +8,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 APP_BUNDLE="$REPO_ROOT/build/Skynet Login Monitor.app"
-INFO_PLIST="$REPO_ROOT/Packaging/Info.plist"
-VERSION="$(/usr/bin/plutil -extract CFBundleShortVersionString raw -o - "$INFO_PLIST")"
+VERSION_INFO="$("$SCRIPT_DIR/app-version.sh")"
+VERSION="${VERSION_INFO%% *}"
 DMG_PATH="$REPO_ROOT/build/Skynet Login Monitor-$VERSION.dmg"
 TEMP_ROOT="$(/usr/bin/mktemp -d '/tmp/skynet-team-release.XXXXXX')"
 

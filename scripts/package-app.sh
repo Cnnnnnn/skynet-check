@@ -59,6 +59,15 @@ fi
 /bin/cp "$ICON_FILE" "$RESOURCE_DIR/AppIcon.icns"
 /bin/cp "$INFO_PLIST" "$CONTENTS_DIR/Info.plist"
 
+VERSION_INFO="$("$SCRIPT_DIR/app-version.sh")"
+VERSION="${VERSION_INFO%% *}"
+COMMIT_COUNT="${VERSION_INFO##* }"
+echo "Packaging version $VERSION (build $COMMIT_COUNT)"
+/usr/libexec/PlistBuddy \
+    -c "Set :CFBundleShortVersionString $VERSION" \
+    -c "Set :CFBundleVersion $COMMIT_COUNT" \
+    "$CONTENTS_DIR/Info.plist"
+
 /usr/bin/plutil -lint "$CONTENTS_DIR/Info.plist"
 /usr/bin/lipo -info "$MACOS_DIR/SkynetLoginMonitor"
 /usr/bin/codesign --force --deep --sign "$SIGNING_IDENTITY" "$APP_BUNDLE"

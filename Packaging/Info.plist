@@ -14,10 +14,12 @@
     <string>APPL</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon.icns</string>
+    <!-- Placeholder values; package-app.sh injects the version from the
+         newest v* git tag and the build number from the commit count. -->
     <key>CFBundleShortVersionString</key>
-    <string>0.1.9</string>
+    <string>0.0.0</string>
     <key>CFBundleVersion</key>
-    <string>10</string>
+    <string>0</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>LSUIElement</key>

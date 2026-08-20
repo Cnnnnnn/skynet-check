@@ -27,6 +27,18 @@ SKYNET_NOTARY_PROFILE; it signs, notarizes, staples, and verifies the DMG.
 Never put certificate files, Apple credentials, or notarization profiles in
 the repository.
 
+## Versioning
+
+Versions come from git tags; `Packaging/Info.plist` keeps placeholder values
+that `scripts/package-app.sh` overwrites at packaging time. The marketing
+version is the newest reachable `v*` tag (e.g. `v0.2.0`) and the build number
+is the commit count. To cut a release, update CHANGELOG.md, commit, then tag:
+
+```bash
+git tag v0.2.1
+scripts/package-team-release.sh
+```
+
 ## Install locally
 
 ```bash
