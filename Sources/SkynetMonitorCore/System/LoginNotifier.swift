@@ -38,6 +38,18 @@ public enum NotificationPermissionStatus: Equatable, Sendable {
     }
 }
 
+public extension NotificationPermissionStatus {
+    // Hidden when the runtime cannot show notifications at all (e.g. a bare
+    // executable run outside an app bundle).
+    var shouldShowInPanel: Bool {
+        self != .unsupported
+    }
+
+    var needsSettingsShortcut: Bool {
+        self == .denied
+    }
+}
+
 enum NotificationPermissionMapper {
     static func status(
         from authorizationStatus: UNAuthorizationStatus
@@ -69,6 +81,8 @@ public final class LoginNotifier: NSObject, LoginNotifying,
     UNUserNotificationCenterDelegate
 {
     private static let identifier = "skynet-login-expired"
+    private static let manualCheckIdentifier = "skynet-manual-check"
+    private static let loginActionIdentifier = "skynet-login-action"
     private static let actionCategory = "skynet-login-actions"
     private let bundle: Bundle
     private let centerProvider: @MainActor () -> UNUserNotificationCenter
@@ -93,12 +107,12 @@ public final class LoginNotifier: NSObject, LoginNotifying,
         let actions = [
             UNNotificationAction(
                 identifier: LoginNotificationAction.login.rawValue,
-                title: "重新登录",
+                title: MonitorText.NotificationAction.login,
                 options: [.foreground]
             ),
             UNNotificationAction(
                 identifier: LoginNotificationAction.check.rawValue,
-                title: "立即检查",
+                title: MonitorText.NotificationAction.check,
                 options: []
             ),
         ]
@@ -148,8 +162,8 @@ public final class LoginNotifier: NSObject, LoginNotifying,
         )
 
         let content = UNMutableNotificationContent()
-        content.title = "Skynet 登录已失效"
-        content.body = "请重新登录，以免 CLI 任务执行时中断。"
+        content.title = MonitorText.ExpiredNotification.title
+        content.body = MonitorText.ExpiredNotification.body
         content.sound = .default
         content.categoryIdentifier = Self.actionCategory
 
@@ -177,9 +191,11 @@ public final class LoginNotifier: NSObject, LoginNotifying,
             content.categoryIdentifier = Self.actionCategory
         }
 
+        // A stable identifier replaces the previous delivered notification
+        // instead of piling up history in Notification Center.
         await post(
             UNNotificationRequest(
-                identifier: "skynet-manual-check-\(UUID().uuidString)",
+                identifier: Self.manualCheckIdentifier,
                 content: content,
                 trigger: nil
             ),
@@ -199,7 +215,7 @@ public final class LoginNotifier: NSObject, LoginNotifying,
 
         await post(
             UNNotificationRequest(
-                identifier: "skynet-login-action-\(UUID().uuidString)",
+                identifier: Self.loginActionIdentifier,
                 content: content,
                 trigger: nil
             ),

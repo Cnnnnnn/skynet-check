@@ -105,17 +105,14 @@ public actor CLIPathLocator: CLIPathLocating {
 
     // Lexicographic ordering would rank "v9.x" above "v10.x"; the numeric
     // segments must be compared as integers to pick the newest node first.
+    // Lexicographic ordering would rank "v9.x" above "v10.x"; the numeric
+    // segments must be compared as integers to pick the newest node first.
     static func isNewerVersion(_ lhs: String, _ rhs: String) -> Bool {
-        let lhsComponents = versionComponents(lhs)
-        let rhsComponents = versionComponents(rhs)
-        for (lhsPart, rhsPart) in zip(lhsComponents, rhsComponents)
-        where lhsPart != rhsPart {
-            return lhsPart > rhsPart
+        guard let lhsVersion = SemanticVersion(lhs),
+              let rhsVersion = SemanticVersion(rhs)
+        else {
+            return false
         }
-        return lhsComponents.count > rhsComponents.count
-    }
-
-    private static func versionComponents(_ name: String) -> [Int] {
-        name.split { !$0.isNumber }.map { Int($0) ?? 0 }
+        return lhsVersion > rhsVersion
     }
 }

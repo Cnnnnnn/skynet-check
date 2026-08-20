@@ -15,40 +15,42 @@ public enum LoginActionResult: Equatable, Sendable {
         switch self {
         case let .alreadyAuthenticated(email):
             ManualCheckNotification(
-                title: "Skynet 当前已登录",
+                title: MonitorText.LoginResultNotification.alreadyAuthenticatedTitle,
                 body: email.map {
-                    "\($0) 当前登录有效，无需重新登录。"
-                } ?? "当前登录有效，无需重新登录。"
+                    MonitorText.LoginResultNotification.alreadyAuthenticatedBody($0)
+                } ?? MonitorText.LoginResultNotification.alreadyAuthenticatedBodyFallback
             )
         case let .completed(.authenticated(email)):
             ManualCheckNotification(
-                title: "Skynet 登录成功",
-                body: email.map { "已登录为 \($0)。" } ?? "登录已完成。"
+                title: MonitorText.LoginResultNotification.loginSucceededTitle,
+                body: email.map {
+                    MonitorText.LoginResultNotification.loginSucceededEmailBody($0)
+                } ?? MonitorText.LoginResultNotification.loginSucceededBody
             )
         case .completed(.offline):
             ManualCheckNotification(
-                title: "Skynet 登录失败",
-                body: "网络不可用，请恢复网络后重试。"
+                title: MonitorText.LoginResultNotification.offlineTitle,
+                body: MonitorText.LoginResultNotification.offlineBody
             )
         case .completed(.cliMissing):
             ManualCheckNotification(
-                title: "无法启动 Skynet 登录",
-                body: "未找到 Skynet CLI。"
+                title: MonitorText.LoginResultNotification.cliMissingTitle,
+                body: MonitorText.LoginResultNotification.cliMissingBody
             )
         case .completed(.serviceError):
             ManualCheckNotification(
-                title: "Skynet 登录失败",
-                body: "登录服务暂时不可用，请稍后重试。"
+                title: MonitorText.LoginResultNotification.serviceErrorTitle,
+                body: MonitorText.LoginResultNotification.serviceErrorBody
             )
         case .completed(.unauthenticated):
             ManualCheckNotification(
-                title: "Skynet 登录未完成",
-                body: "请再次点击“重新登录”重试。"
+                title: MonitorText.LoginResultNotification.stillUnauthenticatedTitle,
+                body: MonitorText.LoginResultNotification.stillUnauthenticatedBody
             )
         case .completed(.checking):
             ManualCheckNotification(
-                title: "Skynet 正在登录",
-                body: "请稍候。"
+                title: MonitorText.LoginResultNotification.pendingTitle,
+                body: MonitorText.LoginResultNotification.pendingBody
             )
         }
     }

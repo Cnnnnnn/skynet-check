@@ -4,6 +4,11 @@ public enum LoginTransitionAction: Equatable, Sendable {
     case notifyExpired
 }
 
+// Every completed unauthenticated check advances the confirmation counter,
+// including manual "check now" taps. Two independent unauthenticated
+// results confirm a failure episode — whether they arrive via the scheduled
+// 30-second recheck or the user checking twice — so an eager user confirms
+// an expiry immediately instead of waiting for the timer.
 public struct LoginTransitionTracker: Sendable {
     private var consecutiveUnauthenticated = 0
     private var notifiedForCurrentEpisode = false

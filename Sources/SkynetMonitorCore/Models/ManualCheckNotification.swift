@@ -15,28 +15,30 @@ public extension LoginState {
             nil
         case let .authenticated(email):
             ManualCheckNotification(
-                title: "Skynet 登录状态正常",
-                body: email.map { "\($0) 当前登录有效。" } ?? "当前登录有效。"
+                title: MonitorText.ManualCheckNotification.authenticatedTitle,
+                body: email.map {
+                    MonitorText.ManualCheckNotification.authenticatedEmailBody($0)
+                } ?? MonitorText.ManualCheckNotification.authenticatedBody
             )
         case .unauthenticated:
             ManualCheckNotification(
-                title: "Skynet 可能已退出登录",
-                body: "将在 30 秒后自动复核。"
+                title: MonitorText.ManualCheckNotification.unauthenticatedTitle,
+                body: MonitorText.ManualCheckNotification.unauthenticatedBody
             )
         case .offline:
             ManualCheckNotification(
-                title: "Skynet 暂时无法检查",
-                body: "网络不可用，请恢复网络后重试。"
+                title: MonitorText.ManualCheckNotification.offlineTitle,
+                body: MonitorText.ManualCheckNotification.offlineBody
             )
         case .serviceError:
             ManualCheckNotification(
-                title: "Skynet 状态检查失败",
-                body: "服务暂时不可用，请稍后重试。"
+                title: MonitorText.ManualCheckNotification.serviceErrorTitle,
+                body: MonitorText.ManualCheckNotification.serviceErrorBody
             )
         case .cliMissing:
             ManualCheckNotification(
-                title: "未找到 Skynet CLI",
-                body: "请确认 Skynet CLI 已安装并可在终端运行。"
+                title: MonitorText.ManualCheckNotification.cliMissingTitle,
+                body: MonitorText.ManualCheckNotification.cliMissingBody
             )
         }
     }

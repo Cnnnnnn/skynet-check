@@ -42,4 +42,17 @@ final class NotificationEnvironmentTests: XCTestCase {
             .notDetermined
         )
     }
+
+    func testPanelVisibilityAndSettingsShortcutRules() {
+        for status in [
+            NotificationPermissionStatus.authorized,
+            .notDetermined,
+            .denied,
+        ] {
+            XCTAssertTrue(status.shouldShowInPanel)
+        }
+        XCTAssertFalse(NotificationPermissionStatus.unsupported.shouldShowInPanel)
+        XCTAssertTrue(NotificationPermissionStatus.denied.needsSettingsShortcut)
+        XCTAssertFalse(NotificationPermissionStatus.authorized.needsSettingsShortcut)
+    }
 }

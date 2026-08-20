@@ -45,17 +45,19 @@ public struct EnvironmentReport: Equatable, Sendable {
             EnvironmentCheck(
                 name: "Skynet CLI",
                 status: cliPath == nil ? .failed : .passed,
-                detail: cliPath ?? "未找到可执行文件"
+                detail: cliPath ?? MonitorText.Environment.cliMissingDetail
             ),
             EnvironmentCheck(
                 name: "Node.js",
                 status: nodeVersion == nil ? .failed : .passed,
-                detail: nodeVersion ?? "未找到 Node.js"
+                detail: nodeVersion ?? MonitorText.Environment.nodeMissingDetail
             ),
             EnvironmentCheck(
                 name: "网络",
                 status: networkAvailable ? .passed : .warning,
-                detail: networkAvailable ? "网络可用" : "网络不可用"
+                detail: networkAvailable
+                    ? MonitorText.Environment.networkAvailableDetail
+                    : MonitorText.Environment.networkUnavailableDetail
             ),
         ]
     }

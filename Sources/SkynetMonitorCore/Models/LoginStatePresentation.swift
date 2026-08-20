@@ -22,37 +22,37 @@ public extension LoginState {
         switch self {
         case .checking:
             LoginStatePresentation(
-                title: "正在检查",
+                title: MonitorText.StateTitle.checking,
                 symbolName: "circle.dotted",
                 tint: .secondary
             )
         case .authenticated:
             LoginStatePresentation(
-                title: "已登录",
+                title: MonitorText.StateTitle.authenticated,
                 symbolName: "checkmark.circle.fill",
                 tint: .green
             )
         case .unauthenticated:
             LoginStatePresentation(
-                title: "登录已失效",
+                title: MonitorText.StateTitle.unauthenticated,
                 symbolName: "exclamationmark.circle.fill",
                 tint: .red
             )
         case .offline:
             LoginStatePresentation(
-                title: "网络不可用",
+                title: MonitorText.StateTitle.offline,
                 symbolName: "wifi.exclamationmark",
                 tint: .yellow
             )
         case .serviceError:
             LoginStatePresentation(
-                title: "暂时无法检查",
+                title: MonitorText.StateTitle.serviceUnavailable,
                 symbolName: "wifi.exclamationmark",
                 tint: .yellow
             )
         case .cliMissing:
             LoginStatePresentation(
-                title: "未找到 Skynet CLI",
+                title: MonitorText.StateTitle.cliMissing,
                 symbolName: "questionmark.circle",
                 tint: .secondary
             )
