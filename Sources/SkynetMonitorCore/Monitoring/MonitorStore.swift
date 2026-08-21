@@ -20,6 +20,7 @@ public final class MonitorStore: ObservableObject {
     @Published public private(set) var sessionStatistics: SessionDurationStatistics?
     @Published public private(set) var loginURL: URL?
     @Published public private(set) var checkDurations = CheckDurationStats()
+    @Published public private(set) var networkStability = NetworkStability()
     @Published public private(set) var skynetConfig: SkynetConfigSummary?
     @Published public private(set) var serviceTokens: [ServiceToken] = []
     @Published public private(set) var tokenValidation: [String: ServiceTokenValidationOutcome] = [:]
@@ -205,6 +206,14 @@ public final class MonitorStore: ObservableObject {
 
     public func handleWake() {
         MonitorLog.store.info("system woke; scheduling refresh")
+        // Reset the periodic timer: after a long sleep its deadline has
+        // already passed and would fire immediately on wake, duplicating
+        // the deferred refresh below.
+        if started, periodicChecksEnabled {
+            periodicTask?.cancel()
+            periodicTask = nil
+            startPeriodicChecks()
+        }
         // Networking (Wi-Fi reassociation, VPN) needs a moment after wake;
         // checking immediately misreports "offline" until the path settles.
         // Repeated wake notifications coalesce into a single deferred check.
@@ -364,7 +373,8 @@ public final class MonitorStore: ObservableObject {
             environment: environmentReport,
             tokenValidation: tokenValidation,
             checkDurations: checkDurations,
-            skynetConfig: skynetConfig
+            skynetConfig: skynetConfig,
+            networkStability: networkStability
         )
     }
 
@@ -467,12 +477,17 @@ public final class MonitorStore: ObservableObject {
         MonitorLog.store.info(
             "network became \(available ? "available" : "unavailable", privacy: .public)"
         )
+        let timestamp = now()
         if available {
+            networkStability.recordRecovery(at: timestamp)
             Task { [weak self] in
                 await self?.refresh()
             }
-        } else if !isChecking {
-            state = .offline
+        } else {
+            networkStability.recordOutage(at: timestamp)
+            if !isChecking {
+                state = .offline
+            }
         }
     }
 
