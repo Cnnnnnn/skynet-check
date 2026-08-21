@@ -214,6 +214,11 @@ public final class MonitorStore: ObservableObject {
         )
         await handleTransition(result)
         await notifier.notifyLoginResult(loginResult)
+        // A login unlocks the platform-backed skill check; re-run it right
+        // away instead of leaving the panel on the needs-login hint.
+        if result.isAuthenticated, skillUpdatePhase == .needsLogin {
+            await checkComponentUpdates()
+        }
     }
 
     public func handleWake() {
@@ -423,6 +428,12 @@ public final class MonitorStore: ObservableObject {
     // stores without checkers (tests) never show it.
     public var showsComponentUpdates: Bool {
         skillUpdateChecker != nil || mcpVersionChecker != nil
+    }
+
+    // No manifest URL configured means "检查更新" can only ever fail; the
+    // panel hides the row instead.
+    public var showsUpdateCheck: Bool {
+        updateChecker != nil
     }
 
     public func diagnosticsReport() -> String {

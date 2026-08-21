@@ -3,8 +3,7 @@ import Foundation
 enum AppConfiguration {
     // TODO: replace with the team's real manifest URL. It must serve JSON
     // like {"version": "0.3.0", "downloadUrl": "https://…/monitor.dmg"}.
-    // Until then, "检查更新" reports a failure instead of false results.
-    static let updateManifestURL = URL(
-        string: "https://example.invalid/skynet-login-monitor/manifest.json"
-    )!
+    // While nil the panel hides the "检查更新" row instead of offering a
+    // check that can only fail.
+    static let updateManifestURL: URL? = nil
 }

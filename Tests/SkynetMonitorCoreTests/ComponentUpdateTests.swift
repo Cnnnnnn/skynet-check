@@ -67,6 +67,92 @@ final class ComponentUpdateTests: XCTestCase {
         )
     }
 
+    func testListPageParsesVersionsAndTotals() throws {
+        let body = """
+        {"code":0,"data":{"total":1165,"page":1,"skills":[
+          {"skill_name":"fe-api-gen","main_version_number":"v11"},
+          {"skill_name":"no-version-skill"},
+          {"skill_name":"bank-react-sdd-base-skill-v2","main_version_number":"v170"}
+        ]}}
+        """
+
+        let result = try HTTPSkynetPlatformClient.parseListPage(
+            from: Data(body.utf8)
+        )
+
+        XCTAssertEqual(result.total, 1165)
+        XCTAssertEqual(result.returned, 3)
+        XCTAssertEqual(
+            result.versions,
+            [
+                "fe-api-gen": "v11",
+                "bank-react-sdd-base-skill-v2": "v170",
+            ]
+        )
+        XCTAssertThrowsError(
+            try HTTPSkynetPlatformClient.parseListPage(from: Data("nope".utf8))
+        )
+        XCTAssertThrowsError(
+            try HTTPSkynetPlatformClient.parseListPage(
+                from: Data(#"{"code":401,"data":null}"#.utf8)
+            )
+        )
+    }
+
+    func testSkillCheckerPrefersBatchOverDetail() async throws {
+        let lockURL = writeTemporaryFile(
+            json: """
+            {"fe-api-gen": {"version": "v10"}, "gone-skill": {"version": "v1"}}
+            """
+        )
+        let client = StubPlatformClient(
+            token: "session-token",
+            latest: ["fe-api-gen": "v10", "gone-skill": "v2"],
+            batch: ["fe-api-gen": "v11"]
+        )
+        let checker = SkillUpdateChecker(lockURL: lockURL, client: client)
+
+        let result = await checker.checkForUpdates()
+
+        XCTAssertEqual(
+            result,
+            .completed(
+                SkillUpdateReport(
+                    totalChecked: 2,
+                    updates: [
+                        // Batch's v11 wins over detail's v10; the name the
+                        // batch missed falls back to detail.
+                        SkillUpdate(name: "fe-api-gen", installedVersion: "v10", latestVersion: "v11"),
+                        SkillUpdate(name: "gone-skill", installedVersion: "v1", latestVersion: "v2"),
+                    ]
+                )
+            )
+        )
+    }
+
+    func testSkillCheckerFallsBackToDetailWhenBatchFails() async throws {
+        let lockURL = writeTemporaryFile(
+            json: #"{"fe-api-gen": {"version": "v10"}}"#
+        )
+        let client = StubPlatformClient(token: "session-token", latest: ["fe-api-gen": "v11"], batch: [:])
+        client.batchFails = true
+        let checker = SkillUpdateChecker(lockURL: lockURL, client: client)
+
+        let result = await checker.checkForUpdates()
+
+        XCTAssertEqual(
+            result,
+            .completed(
+                SkillUpdateReport(
+                    totalChecked: 1,
+                    updates: [
+                        SkillUpdate(name: "fe-api-gen", installedVersion: "v10", latestVersion: "v11"),
+                    ]
+                )
+            )
+        )
+    }
+
     // MARK: - SkillUpdateChecker
 
     func testSkillCheckerReportsOutdatedSkills() async throws {
@@ -476,6 +562,30 @@ final class ComponentUpdateTests: XCTestCase {
     }
 
     @MainActor
+    func testLoginRechecksComponentsWhenWaitingForLogin() async {
+        let skillChecker = MutableSkillUpdateChecker()
+        skillChecker.result = .needsLogin
+        let store = MonitorStore(
+            checker: StubChecker(),
+            networkMonitor: StubNetworkMonitor(),
+            notifier: StubNotifier(),
+            periodicInterval: nil,
+            skillUpdateChecker: skillChecker
+        )
+
+        await store.checkComponentUpdates()
+        XCTAssertEqual(store.skillUpdatePhase, .needsLogin)
+
+        skillChecker.result = .completed(
+            SkillUpdateReport(totalChecked: 5, updates: [])
+        )
+        await store.login()
+
+        XCTAssertEqual(store.skillUpdatePhase, .completed)
+        XCTAssertEqual(store.skillUpdateReport?.totalChecked, 5)
+    }
+
+    @MainActor
     func testStoreWithoutCheckersHidesComponentUpdates() async {
         let store = MonitorStore(
             checker: StubChecker(),
@@ -485,6 +595,7 @@ final class ComponentUpdateTests: XCTestCase {
         )
 
         XCTAssertFalse(store.showsComponentUpdates)
+        XCTAssertFalse(store.showsUpdateCheck)
         await store.checkComponentUpdates()
         XCTAssertEqual(store.skillUpdatePhase, .idle)
     }
@@ -575,16 +686,30 @@ final class ComponentUpdateTests: XCTestCase {
 
 private final class StubPlatformClient: SkynetSkillVersionFetching, @unchecked Sendable {
     let token: String?
+    var batch: [String: String]
     var latest: [String: String]
+    var batchFails = false
     var failingSkills: Set<String> = []
 
-    init(token: String?, latest: [String: String]) {
+    init(
+        token: String?,
+        latest: [String: String],
+        batch: [String: String] = [:]
+    ) {
         self.token = token
         self.latest = latest
+        self.batch = batch
     }
 
     func sessionToken() async -> String? {
         token
+    }
+
+    func latestMainVersions() async throws -> [String: String] {
+        if batchFails {
+            throw HTTPSkynetPlatformClient.ClientError.apiRejected
+        }
+        return batch
     }
 
     func latestMainVersion(for skillName: String) async throws -> String? {

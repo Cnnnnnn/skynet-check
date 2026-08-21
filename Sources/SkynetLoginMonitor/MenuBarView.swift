@@ -212,7 +212,9 @@ struct MenuBarView: View {
                             .frame(width: 52, alignment: .trailing)
                     }
 
-                    updateCheckRow
+                    if store.showsUpdateCheck {
+                        updateCheckRow
+                    }
 
                     if launchAtLogin.requiresApproval {
                         Text("需要在“系统设置 → 登录项”中允许")

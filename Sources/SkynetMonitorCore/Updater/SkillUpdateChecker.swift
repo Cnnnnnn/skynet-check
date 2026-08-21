@@ -55,9 +55,12 @@ public protocol SkillUpdateChecking: Sendable {
 
 // Talks to the Skynet platform skill API. A skill's "latest" is its main
 // version (`main_version_number`), matching what `skynet skill install
-// <name>@latest` resolves to on the CLI.
+// <name>@latest` resolves to on the CLI. The list endpoint is paginated
+// (page_size up to 500) and carries the same version field per entry, so
+// bulk checks page through it instead of one detail call per skill.
 public protocol SkynetSkillVersionFetching: Sendable {
     func sessionToken() async -> String?
+    func latestMainVersions() async throws -> [String: String]
     func latestMainVersion(for skillName: String) async throws -> String?
 }
 
@@ -105,7 +108,41 @@ public actor HTTPSkynetPlatformClient: SkynetSkillVersionFetching {
         guard let url = components.url else {
             throw ClientError.malformedResponse
         }
+        let data = try await get(url)
+        return try Self.parseDetailResponse(from: data)
+    }
 
+    public func latestMainVersions() async throws -> [String: String] {
+        var versions: [String: String] = [:]
+        var page = 1
+        let pageSize = 500
+        let maxPages = 10
+        while page <= maxPages {
+            guard var components = URLComponents(
+                url: apiBase,
+                resolvingAgainstBaseURL: false
+            ) else {
+                throw ClientError.malformedResponse
+            }
+            components.path = "/api/platform/agent_skill/v1/list"
+            components.queryItems = [
+                URLQueryItem(name: "page", value: String(page)),
+                URLQueryItem(name: "page_size", value: String(pageSize)),
+            ]
+            guard let url = components.url else {
+                throw ClientError.malformedResponse
+            }
+            let result = try Self.parseListPage(from: try await get(url))
+            versions.merge(result.versions) { current, _ in current }
+            if versions.count >= result.total || result.returned < pageSize {
+                break
+            }
+            page += 1
+        }
+        return versions
+    }
+
+    private func get(_ url: URL) async throws -> Data {
         var request = URLRequest(url: url)
         if let token = sessionToken() {
             request.setValue(
@@ -113,9 +150,8 @@ public actor HTTPSkynetPlatformClient: SkynetSkillVersionFetching {
                 forHTTPHeaderField: "Cookie"
             )
         }
-
         let (data, _) = try await session.data(for: request)
-        return try Self.parseDetailResponse(from: data)
+        return data
     }
 
     static func parseSessionToken(from data: Data) -> String? {
@@ -123,6 +159,55 @@ public actor HTTPSkynetPlatformClient: SkynetSkillVersionFetching {
             let token: String?
         }
         return (try? JSONDecoder().decode(Session.self, from: data))?.token
+    }
+
+    // `{"code":0,"data":{"total":N,"skills":[{"skill_name":…,
+    // "main_version_number":…}]}}`; code 0 with entries missing the
+    // version field simply contributes nothing to the map.
+    static func parseListPage(from data: Data) throws -> (
+        total: Int,
+        returned: Int,
+        versions: [String: String]
+    ) {
+        struct Entry: Decodable {
+            let skillName: String?
+            let mainVersionNumber: String?
+
+            enum CodingKeys: String, CodingKey {
+                case skillName = "skill_name"
+                case mainVersionNumber = "main_version_number"
+            }
+        }
+        struct Page: Decodable {
+            let total: Int?
+            let skills: [Entry]?
+        }
+        struct Response: Decodable {
+            let code: Int?
+            let data: Page?
+        }
+
+        guard let response = try? JSONDecoder().decode(Response.self, from: data) else {
+            throw ClientError.malformedResponse
+        }
+        guard response.code == 0 else {
+            throw ClientError.apiRejected
+        }
+        var versions: [String: String] = [:]
+        for entry in response.data?.skills ?? [] {
+            if let name = entry.skillName,
+               let version = entry.mainVersionNumber,
+               !name.isEmpty,
+               !version.isEmpty
+            {
+                versions[name] = version
+            }
+        }
+        return (
+            response.data?.total ?? 0,
+            response.data?.skills?.count ?? 0,
+            versions
+        )
     }
 
     // `{"code":0,"data":{"main_version_number":"v10"}}`; code 0 with a data
@@ -187,10 +272,16 @@ public actor SkillUpdateChecker: SkillUpdateChecking {
             return .failed
         }
 
-        var latestVersions: [String: String] = [:]
-        for chunk in tracked.chunked(into: maxConcurrent) {
+        // The list endpoint answers for ~every skill in a couple of pages;
+        // per-name detail is only the fallback for names it did not cover
+        // (or the whole batch failing).
+        var latestVersions = (try? await client.latestMainVersions()) ?? [:]
+        let unresolved = tracked
+            .map(\.key)
+            .filter { latestVersions[$0] == nil }
+        for chunk in unresolved.chunked(into: maxConcurrent) {
             await withTaskGroup(of: (String, String?).self) { group in
-                for (name, _) in chunk {
+                for name in chunk {
                     group.addTask {
                         (name, try? await self.client.latestMainVersion(for: name))
                     }

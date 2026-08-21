@@ -34,9 +34,9 @@ struct SkynetLoginMonitorApp: App {
             mcpVersionChecker: McpVersionChecker(
                 registry: HTTPNpmRegistryClient()
             ),
-            updateChecker: HTTPAppUpdateChecker(
-                manifestURL: AppConfiguration.updateManifestURL
-            ),
+            updateChecker: AppConfiguration.updateManifestURL.map {
+                HTTPAppUpdateChecker(manifestURL: $0)
+            },
             currentAppVersion: Bundle.main
                 .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         )

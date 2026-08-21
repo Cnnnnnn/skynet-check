@@ -5,8 +5,20 @@ follow the newest `v*` git tag; the build number is the commit count.
 
 ## [Unreleased]
 
+### Added
+
+- A successful login automatically re-runs the component-version check
+  when it was waiting for login, instead of keeping the needs-login hint
+  until a manual recheck.
+
 ### Changed
 
+- Skill update checks page through the platform's list endpoint (up to
+  500 per request) and only fall back to per-skill detail calls for
+  names the list did not cover — roughly 56 requests become ~3.
+- The "检查更新" row is hidden while no update manifest URL is
+  configured (`AppConfiguration.updateManifestURL` is now optional), so
+  the panel no longer offers a check that can only fail.
 - The "组件版本" card keeps the first three upgradable skills visible and
   folds the rest behind a "查看更多" disclosure inside the card.
 
