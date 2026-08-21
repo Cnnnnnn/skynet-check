@@ -170,6 +170,50 @@ final class SessionExpiryTests: XCTestCase {
         XCTAssertEqual(DurationPresentation.summarize(90 * 60), "1.5 小时")
     }
 
+    func testNetworkStabilityTracksOutageWindows() {
+        let base = Date(timeIntervalSince1970: 1_700_000_000)
+        var stability = NetworkStability()
+
+        stability.recordOutage(at: base)
+        stability.recordRecovery(at: base.addingTimeInterval(120))
+        // Duplicate outage/recovery without a matching start is ignored.
+        stability.recordRecovery(at: base.addingTimeInterval(180))
+        stability.recordOutage(at: base.addingTimeInterval(1000))
+        stability.recordOutage(at: base.addingTimeInterval(1100))
+        stability.recordRecovery(at: base.addingTimeInterval(1400))
+
+        let dayAgo = base.addingTimeInterval(-24 * 3600)
+        XCTAssertEqual(stability.outages(since: dayAgo).count, 2)
+        XCTAssertEqual(
+            stability.totalDowntime(since: dayAgo),
+            120 + 400,
+            accuracy: 0.001
+        )
+    }
+
+    func testIncludesNetworkStabilityInDiagnostics() {
+        var stability = NetworkStability()
+        let base = Date(timeIntervalSince1970: 1_700_000_000)
+        stability.recordOutage(at: base.addingTimeInterval(-3600))
+        stability.recordRecovery(at: base.addingTimeInterval(-3540))
+
+        let report = DiagnosticsComposer.compose(
+            appVersion: nil,
+            state: nil,
+            lastCheckedAt: nil,
+            lastCompletedState: nil,
+            sessionExpiresAt: nil,
+            pollingIntervalMinutes: 15,
+            notificationPermission: .authorized,
+            permissionAudit: nil,
+            environment: nil,
+            networkStability: stability,
+            now: base
+        )
+
+        XCTAssertTrue(report.contains("网络稳定性：24h 掉线 1 次 · 累计 1 分钟"))
+    }
+
     func testDurationStatsCapEntriesAndAverage() {
         var stats = CheckDurationStats()
         for index in 0..<15 {

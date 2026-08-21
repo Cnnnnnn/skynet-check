@@ -18,6 +18,7 @@ public enum DiagnosticsComposer {
         tokenValidation: [String: ServiceTokenValidationOutcome] = [:],
         checkDurations: CheckDurationStats = CheckDurationStats(),
         skynetConfig: SkynetConfigSummary? = nil,
+        networkStability: NetworkStability = NetworkStability(),
         now: Date = Date()
     ) -> String {
         var lines: [String] = []
@@ -71,6 +72,14 @@ public enum DiagnosticsComposer {
             } ?? ""
             lines.append(
                 "检查耗时：最近 \(DurationPresentation.summarizeSeconds(last))\(average)"
+            )
+        }
+        let dayAgo = now.addingTimeInterval(-24 * 3600)
+        let recentOutages = networkStability.outages(since: dayAgo)
+        if !recentOutages.isEmpty {
+            let downtime = networkStability.totalDowntime(since: dayAgo)
+            lines.append(
+                "网络稳定性：24h 掉线 \(recentOutages.count) 次 · 累计 \(DurationPresentation.summarize(downtime))"
             )
         }
         for (key, outcome) in tokenValidation.sorted(by: { $0.key < $1.key }) {

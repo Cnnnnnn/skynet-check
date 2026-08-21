@@ -1,5 +1,41 @@
 import Foundation
 
+public struct NetworkStability: Equatable, Sendable {
+    public private(set) var outages: [ClosedRange<Date>] = []
+    private var pendingOutageStart: Date?
+
+    public init() {}
+
+    public mutating func recordOutage(at date: Date) {
+        guard pendingOutageStart == nil else {
+            return
+        }
+        pendingOutageStart = date
+    }
+
+    public mutating func recordRecovery(at date: Date) {
+        guard let start = pendingOutageStart else {
+            return
+        }
+        pendingOutageStart = nil
+        outages.append(start...max(start, date))
+        // Keep the most recent windows only; older history stops being
+        // representative of the current environment.
+        if outages.count > 50 {
+            outages.removeFirst(outages.count - 50)
+        }
+    }
+
+    public func outages(since date: Date) -> [ClosedRange<Date>] {
+        outages.filter { $0.upperBound >= date }
+    }
+
+    public func totalDowntime(since date: Date) -> TimeInterval {
+        outages(since: date)
+            .reduce(0) { $0 + $1.upperBound.timeIntervalSince($1.lowerBound) }
+    }
+}
+
 public struct CheckDurationStats: Equatable, Sendable {
     public private(set) var recent: [TimeInterval] = []
 
