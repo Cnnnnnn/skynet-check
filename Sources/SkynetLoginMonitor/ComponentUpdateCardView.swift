@@ -100,17 +100,12 @@ struct ComponentUpdateCardView: View {
                     ),
                 warning: !report.updates.isEmpty
             )
-            ForEach(report.updates.prefix(3)) { update in
+            ForEach(report.updates) { update in
                 changeRow(
                     title: update.name,
                     from: update.installedVersion,
                     to: update.latestVersion
                 )
-            }
-            if report.updates.count > 3 {
-                Text("等 \(report.updates.count) 个")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
             }
             if !report.updates.isEmpty {
                 UpgradeActionRow(

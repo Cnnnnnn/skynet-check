@@ -3,6 +3,13 @@
 All notable changes to this project are documented in this file. Versions
 follow the newest `v*` git tag; the build number is the commit count.
 
+## [Unreleased]
+
+### Changed
+
+- The "组件版本" card lists every upgradable skill instead of the first
+  three.
+
 ## [0.7.0] - 2026-08-21
 
 ### Added
