@@ -6,18 +6,32 @@ struct ServiceTokenCardView: View {
     let tokens: [ServiceToken]
     var validation: [String: ServiceTokenValidationOutcome] = [:]
 
+    @State private var isExpanded = false
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("服务 Token", systemImage: "key")
-                .font(.subheadline.weight(.semibold))
-            Text("仅本机显示，复制后可粘贴到需要的位置。")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            ForEach(tokens, id: \.key) { token in
-                TokenRow(
-                    token: token,
-                    outcome: validation[token.key]
-                )
+        DisclosureGroup(isExpanded: $isExpanded) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("仅本机显示，复制后可粘贴到需要的位置。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                ForEach(tokens, id: \.key) { token in
+                    TokenRow(
+                        token: token,
+                        outcome: validation[token.key]
+                    )
+                }
+            }
+            .padding(.top, 6)
+        } label: {
+            HStack(spacing: 6) {
+                Label("服务 Token", systemImage: "key")
+                    .font(.subheadline.weight(.semibold))
+                if validation.values.contains(.invalid) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                        .accessibilityHidden(true)
+                }
             }
         }
         .padding(10)

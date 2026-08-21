@@ -10,6 +10,7 @@ struct MenuBarView: View {
     @State private var launchAtLoginEnabled: Bool
     @State private var launchAtLoginMessage: String?
     @State private var diagnosticsCopied = false
+    @State private var isSettingsExpanded = false
 
     init(
         store: MonitorStore,
@@ -158,60 +159,68 @@ struct MenuBarView: View {
 
             Divider()
 
-            HStack {
-                Label("开机启动", systemImage: "power")
-                    .font(.subheadline)
-                Spacer()
-                Toggle(
-                    "",
-                    isOn: Binding(
-                        get: { launchAtLoginEnabled },
-                        set: { enabled in setLaunchAtLogin(enabled) }
-                    )
-                )
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .accessibilityLabel(Text("开机启动"))
-            }
+            DisclosureGroup(isExpanded: $isSettingsExpanded) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Label("开机启动", systemImage: "power")
+                            .font(.subheadline)
+                        Spacer()
+                        Toggle(
+                            "",
+                            isOn: Binding(
+                                get: { launchAtLoginEnabled },
+                                set: { enabled in setLaunchAtLogin(enabled) }
+                            )
+                        )
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                        .accessibilityLabel(Text("开机启动"))
+                    }
 
-            HStack(spacing: 10) {
-                Label("自动检查", systemImage: "timer")
-                    .font(.subheadline)
-                Slider(
-                    value: pollingIntervalBinding,
-                    in: 3.0...60.0,
-                    step: 1
-                )
-                .accessibilityLabel(Text("自动检查间隔"))
-                .accessibilityValue(Text("\(store.pollingIntervalMinutes) 分钟"))
-                Text("\(store.pollingIntervalMinutes) 分钟")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 52, alignment: .trailing)
-            }
+                    HStack(spacing: 10) {
+                        Label("自动检查", systemImage: "timer")
+                            .font(.subheadline)
+                        Slider(
+                            value: pollingIntervalBinding,
+                            in: 3.0...60.0,
+                            step: 1
+                        )
+                        .accessibilityLabel(Text("自动检查间隔"))
+                        .accessibilityValue(Text("\(store.pollingIntervalMinutes) 分钟"))
+                        Text("\(store.pollingIntervalMinutes) 分钟")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 52, alignment: .trailing)
+                    }
 
-            updateCheckRow
+                    updateCheckRow
 
-            if launchAtLogin.requiresApproval {
-                Text("需要在“系统设置 → 登录项”中允许")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            if let launchAtLoginMessage {
-                Text(launchAtLoginMessage)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+                    if launchAtLogin.requiresApproval {
+                        Text("需要在“系统设置 → 登录项”中允许")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let launchAtLoginMessage {
+                        Text(launchAtLoginMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
 
-            HStack {
-                Button("重置会话统计") {
-                    store.resetSessionStatistics()
+                    HStack {
+                        Button("重置会话统计") {
+                            store.resetSessionStatistics()
+                        }
+                        .buttonStyle(.borderless)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        Spacer()
+                    }
                 }
-                .buttonStyle(.borderless)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                Spacer()
+                .padding(.top, 6)
+            } label: {
+                Label("设置", systemImage: "gearshape")
+                    .font(.subheadline.weight(.semibold))
             }
 
             HStack {
