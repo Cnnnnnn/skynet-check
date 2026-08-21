@@ -3,6 +3,29 @@
 All notable changes to this project are documented in this file. Versions
 follow the newest `v*` git tag; the build number is the commit count.
 
+## [0.6.0] - 2026-08-21
+
+### Fixed
+
+- The notification authorization prompt no longer blocks startup; the
+  first check and network monitoring run while the prompt is pending.
+- Action buttons span the full panel width and the token copy button uses
+  a bordered style.
+- Waking from sleep resets the periodic timer, avoiding an immediate
+  duplicate check alongside the deferred wake refresh.
+
+### Added
+
+- Login URL streams out while the login command runs, so the manual
+  "打开登录页面" fallback appears immediately instead of after a failure.
+- Tapping a notification body now performs its most useful action
+  (re-login for expiry alerts, re-check for manual results).
+- Diagnostics report includes CLI check durations, the Skynet CLI config
+  summary (mode/role/language), and 24h network outage history.
+- "重置会话统计" action to discard corrupted session-duration samples.
+- Token card and settings section collapse into disclosure groups to keep
+  the panel compact.
+
 ## [0.5.0] - 2026-08-21
 
 ### Added
