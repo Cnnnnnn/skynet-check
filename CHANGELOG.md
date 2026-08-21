@@ -7,8 +7,8 @@ follow the newest `v*` git tag; the build number is the commit count.
 
 ### Changed
 
-- The "组件版本" card lists every upgradable skill instead of the first
-  three.
+- The "组件版本" card keeps the first three upgradable skills visible and
+  folds the rest behind a "查看更多" disclosure inside the card.
 
 ## [0.7.0] - 2026-08-21
 

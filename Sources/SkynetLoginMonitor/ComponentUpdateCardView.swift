@@ -12,6 +12,7 @@ struct ComponentUpdateCardView: View {
     let onRecheck: () -> Void
 
     @State private var isExpanded = false
+    @State private var isMoreExpanded = false
 
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
@@ -100,12 +101,15 @@ struct ComponentUpdateCardView: View {
                     ),
                 warning: !report.updates.isEmpty
             )
-            ForEach(report.updates) { update in
+            ForEach(report.updates.prefix(3)) { update in
                 changeRow(
                     title: update.name,
                     from: update.installedVersion,
                     to: update.latestVersion
                 )
+            }
+            if report.updates.count > 3 {
+                moreSkillsDisclosure(remaining: Array(report.updates.dropFirst(3)))
             }
             if !report.updates.isEmpty {
                 UpgradeActionRow(
@@ -145,6 +149,28 @@ struct ComponentUpdateCardView: View {
                     primaryCommand: CLIInstallGuide.mcpRepairCommand
                 )
             }
+        }
+    }
+
+    private func moreSkillsDisclosure(remaining: [SkillUpdate]) -> some View {
+        DisclosureGroup(isExpanded: $isMoreExpanded) {
+            VStack(alignment: .leading, spacing: 7) {
+                ForEach(remaining) { update in
+                    changeRow(
+                        title: update.name,
+                        from: update.installedVersion,
+                        to: update.latestVersion
+                    )
+                }
+            }
+            .padding(.top, 4)
+        } label: {
+            Label(
+                "查看更多（剩余 \(remaining.count) 个）",
+                systemImage: "ellipsis.rectangle"
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
     }
 
