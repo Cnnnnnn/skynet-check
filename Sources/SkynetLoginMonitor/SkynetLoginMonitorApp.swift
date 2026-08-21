@@ -28,6 +28,12 @@ struct SkynetLoginMonitorApp: App {
             serviceTokenReader: ServiceTokenStore(),
             tokenValidator: ConfluenceTokenValidator(),
             configReader: SkynetConfigReader(),
+            skillUpdateChecker: SkillUpdateChecker(
+                client: HTTPSkynetPlatformClient()
+            ),
+            mcpVersionChecker: McpVersionChecker(
+                registry: HTTPNpmRegistryClient()
+            ),
             updateChecker: HTTPAppUpdateChecker(
                 manifestURL: AppConfiguration.updateManifestURL
             ),

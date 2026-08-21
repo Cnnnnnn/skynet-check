@@ -20,6 +20,9 @@ public enum DiagnosticsComposer {
         checkDurations: CheckDurationStats = CheckDurationStats(),
         skynetConfig: SkynetConfigSummary? = nil,
         networkStability: NetworkStability = NetworkStability(),
+        skillUpdatePhase: ComponentUpdatePhase = .idle,
+        skillUpdateReport: SkillUpdateReport? = nil,
+        mcpVersionFindings: [McpVersionFinding] = [],
         now: Date = Date()
     ) -> String {
         var lines: [String] = []
@@ -82,6 +85,13 @@ public enum DiagnosticsComposer {
                 "检查耗时：最近 \(DurationPresentation.summarizeSeconds(last))\(average)"
             )
         }
+        lines.append(
+            contentsOf: componentVersionLines(
+                phase: skillUpdatePhase,
+                report: skillUpdateReport,
+                findings: mcpVersionFindings
+            )
+        )
         let dayAgo = now.addingTimeInterval(-24 * 3600)
         let recentOutages = networkStability.outages(since: dayAgo)
         if !recentOutages.isEmpty {
@@ -101,6 +111,53 @@ public enum DiagnosticsComposer {
             date: .abbreviated,
             time: .shortened
         )
+    }
+
+    // Compact component-version lines: one summary per category, with a few
+    // named examples so a pasted report stays readable without listing every
+    // drifted skill.
+    private static func componentVersionLines(
+        phase: ComponentUpdatePhase,
+        report: SkillUpdateReport?,
+        findings: [McpVersionFinding]
+    ) -> [String] {
+        var lines: [String] = []
+        switch phase {
+        case .completed:
+            if let report {
+                if report.updates.isEmpty {
+                    lines.append(
+                        "组件版本：Skill \(report.totalChecked) 个均为最新"
+                    )
+                } else {
+                    let examples = report.updates
+                        .prefix(3)
+                        .map { "\($0.name) \($0.installedVersion) → \($0.latestVersion)" }
+                        .joined(separator: "、")
+                    let suffix = report.updates.count > 3
+                        ? " 等 \(report.updates.count) 个" : ""
+                    lines.append(
+                        "组件版本：Skill \(report.updates.count)/\(report.totalChecked) 可升级（\(examples)\(suffix)）"
+                    )
+                }
+            }
+        case .needsLogin:
+            lines.append("组件版本：Skill 更新检测需登录后可用")
+        case .idle, .checking, .failed:
+            break
+        }
+
+        let upgradableMCPs = findings.filter(\.isUpgradable)
+        if !upgradableMCPs.isEmpty {
+            let details = upgradableMCPs
+                .map { finding in
+                    let installed = finding.installedVersion ?? "?"
+                    return "\(finding.serverName) \(installed) → \(finding.latestVersion ?? "?")"
+                }
+                .joined(separator: "、")
+            lines.append("组件版本：MCP 可升级 \(details)")
+        }
+        return lines
     }
 
     private static func modeText(_ mode: Int?) -> String {

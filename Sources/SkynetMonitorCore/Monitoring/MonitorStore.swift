@@ -25,6 +25,9 @@ public final class MonitorStore: ObservableObject {
     @Published public private(set) var skynetConfig: SkynetConfigSummary?
     @Published public private(set) var serviceTokens: [ServiceToken] = []
     @Published public private(set) var tokenValidation: [String: ServiceTokenValidationOutcome] = [:]
+    @Published public private(set) var skillUpdatePhase: ComponentUpdatePhase = .idle
+    @Published public private(set) var skillUpdateReport: SkillUpdateReport?
+    @Published public private(set) var mcpVersionFindings: [McpVersionFinding] = []
 
     private let checker: any SkynetAuthChecking
     private let networkMonitor: any NetworkMonitoring
@@ -45,6 +48,8 @@ public final class MonitorStore: ObservableObject {
     private let serviceTokenReader: (any ServiceTokenReading)?
     private let tokenValidator: (any ServiceTokenValidating)?
     private let configReader: SkynetConfigReader?
+    private let skillUpdateChecker: (any SkillUpdateChecking)?
+    private let mcpVersionChecker: (any McpVersionChecking)?
     private var expiryTracker: SessionExpiryTracker
     private var expiryAdvisor = SessionExpiryAdvisor()
     private var periodicTask: Task<Void, Never>?
@@ -52,6 +57,7 @@ public final class MonitorStore: ObservableObject {
     private var wakeTask: Task<Void, Never>?
     private var refreshPending = false
     private var pendingResultNotification = false
+    private var componentUpdateInProgress = false
     private var started = false
     private var notifiedInvalidTokenKeys: Set<String> = []
 
@@ -70,6 +76,8 @@ public final class MonitorStore: ObservableObject {
         serviceTokenReader: (any ServiceTokenReading)? = nil,
         tokenValidator: (any ServiceTokenValidating)? = nil,
         configReader: SkynetConfigReader? = nil,
+        skillUpdateChecker: (any SkillUpdateChecking)? = nil,
+        mcpVersionChecker: (any McpVersionChecking)? = nil,
         updateChecker: (any AppUpdateChecking)? = nil,
         currentAppVersion: String? = nil,
         now: @escaping @Sendable () -> Date = Date.init
@@ -89,6 +97,8 @@ public final class MonitorStore: ObservableObject {
         self.serviceTokenReader = serviceTokenReader
         self.tokenValidator = tokenValidator
         self.configReader = configReader
+        self.skillUpdateChecker = skillUpdateChecker
+        self.mcpVersionChecker = mcpVersionChecker
         self.expiryTracker = SessionExpiryTracker(
             record: sessionExpiryStore?.load() ?? SessionExpiryRecord()
         )
@@ -260,6 +270,12 @@ public final class MonitorStore: ObservableObject {
     }
 
     public func inspectEnvironment() async {
+        // Component-version checks hit the platform and npm registries and
+        // can take seconds; they run beside the environment probes instead
+        // of blocking them.
+        if skillUpdateChecker != nil || mcpVersionChecker != nil {
+            Task { await checkComponentUpdates() }
+        }
         notificationPermission = await notifier.authorizationStatus()
         if let serviceTokenReader {
             // Values are published for the panel's copy action only; never
@@ -362,6 +378,53 @@ public final class MonitorStore: ObservableObject {
         }
     }
 
+    // Compares locally installed skills/MCP packages against their remote
+    // latest versions. Detection only — upgrades stay with the CLI.
+    public func checkComponentUpdates() async {
+        guard skillUpdateChecker != nil || mcpVersionChecker != nil else {
+            return
+        }
+        guard !componentUpdateInProgress else {
+            return
+        }
+        componentUpdateInProgress = true
+        skillUpdatePhase = .checking
+
+        async let skillResult = skillUpdateChecker?.checkForUpdates()
+        async let mcpResult = mcpVersionChecker?.checkVersions()
+        let (skills, mcps) = await (skillResult, mcpResult)
+
+        if let skills {
+            switch skills {
+            case .needsLogin:
+                skillUpdatePhase = .needsLogin
+                skillUpdateReport = nil
+            case let .completed(report):
+                skillUpdatePhase = .completed
+                skillUpdateReport = report
+            case .failed:
+                skillUpdatePhase = .failed
+                skillUpdateReport = nil
+            }
+            MonitorLog.store.info(
+                "skill update check: \(skills.logLabel, privacy: .public)"
+            )
+        }
+        if let mcps {
+            mcpVersionFindings = mcps
+            MonitorLog.store.info(
+                "mcp version check: \(mcps.count, privacy: .public) server(s)"
+            )
+        }
+        componentUpdateInProgress = false
+    }
+
+    // The component card appears once a check has produced anything to say;
+    // stores without checkers (tests) never show it.
+    public var showsComponentUpdates: Bool {
+        skillUpdateChecker != nil || mcpVersionChecker != nil
+    }
+
     public func diagnosticsReport() -> String {
         DiagnosticsComposer.compose(
             appVersion: currentAppVersion,
@@ -377,7 +440,10 @@ public final class MonitorStore: ObservableObject {
             tokenValidation: tokenValidation,
             checkDurations: checkDurations,
             skynetConfig: skynetConfig,
-            networkStability: networkStability
+            networkStability: networkStability,
+            skillUpdatePhase: skillUpdatePhase,
+            skillUpdateReport: skillUpdateReport,
+            mcpVersionFindings: mcpVersionFindings
         )
     }
 

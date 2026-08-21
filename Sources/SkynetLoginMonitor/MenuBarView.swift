@@ -152,6 +152,15 @@ struct MenuBarView: View {
                 )
             }
 
+            if store.showsComponentUpdates {
+                ComponentUpdateCardView(
+                    phase: store.skillUpdatePhase,
+                    skillReport: store.skillUpdateReport,
+                    mcpFindings: store.mcpVersionFindings,
+                    onRecheck: { Task { await store.checkComponentUpdates() } }
+                )
+            }
+
             if !store.serviceTokens.isEmpty {
                 ServiceTokenCardView(
                     tokens: store.serviceTokens,

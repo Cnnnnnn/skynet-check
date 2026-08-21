@@ -157,4 +157,28 @@ public enum MonitorText {
         public static let upToDate = "已是最新版本"
         public static let failed = "检查更新失败"
     }
+
+    public enum ComponentUpdate {
+        public static let cardTitle = "组件版本"
+        public static let checking = "正在检查组件版本…"
+        public static let needsLogin = "登录后可检测 Skill 更新"
+        public static let failed = "组件版本检测失败，可点“重新检查”重试"
+        public static let skillSection = "Skill"
+        public static let mcpSection = "MCP"
+        public static func skillAllCurrent(_ total: Int) -> String {
+            "\(total) 个已检查，均为最新"
+        }
+        public static func skillOutdated(_ count: Int, total: Int) -> String {
+            "\(total) 个已检查，\(count) 个可升级"
+        }
+        public static func skillUpgradeTitle(_ count: Int) -> String {
+            "\(count) 个 Skill 可升级"
+        }
+        public static func mcpUpgradeTitle(_ count: Int) -> String {
+            "\(count) 个 MCP 可升级"
+        }
+        public static let unpinnedDetail = "未固定版本"
+        public static let unavailableDetail = "无法确定"
+        public static let upgradableSuffix = "可升级"
+    }
 }

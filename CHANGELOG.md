@@ -5,6 +5,15 @@ follow the newest `v*` git tag; the build number is the commit count.
 
 ## [Unreleased]
 
+### Added
+
+- New "组件版本" panel card and diagnostics lines: skills pinned in the
+  team lock are compared against the Skynet platform's main versions, and
+  configured MCP servers (npx version pins and global binaries) against
+  the internal npm registries. Detection only — upgrade actions hand off
+  to `skynet update tools` / `skynet skill install <name>@latest`, and
+  the skill check defers to the login state.
+
 ### Changed
 
 - Past session-expiry estimates no longer look like a live deadline:
