@@ -17,6 +17,7 @@ public final class MonitorStore: ObservableObject {
     @Published public private(set) var updateStatus: AppUpdateStatus = .idle
     @Published public private(set) var availableUpdate: AppUpdateManifest?
     @Published public private(set) var sessionExpiresAt: Date?
+    @Published public private(set) var sessionExpiryOutlived = false
     @Published public private(set) var sessionStatistics: SessionDurationStatistics?
     @Published public private(set) var loginURL: URL?
     @Published public private(set) var checkDurations = CheckDurationStats()
@@ -107,6 +108,7 @@ public final class MonitorStore: ObservableObject {
         if let estimatedExpiry = expiryTracker.estimatedExpiry(now: now()) {
             sessionExpiresAt = estimatedExpiry
         }
+        sessionExpiryOutlived = expiryTracker.hasOutlivedEstimate(now: now())
         sessionStatistics = expiryTracker.currentRecord.statistics
     }
 
@@ -339,10 +341,10 @@ public final class MonitorStore: ObservableObject {
     private func handleSessionExpiry(_ result: LoginState, at date: Date) async {
         expiryTracker.recordState(result, at: date)
         sessionExpiryStore?.save(expiryTracker.currentRecord)
-        sessionStatistics = expiryTracker.currentRecord.statistics
-
         let estimatedExpiry = expiryTracker.estimatedExpiry(now: date)
         sessionExpiresAt = estimatedExpiry
+        sessionExpiryOutlived = expiryTracker.hasOutlivedEstimate(now: date)
+        sessionStatistics = expiryTracker.currentRecord.statistics
 
         let sessionStartedAt = expiryTracker.currentRecord.lastAuthenticatedAt
         if let stage = expiryAdvisor.evaluate(
@@ -367,6 +369,7 @@ public final class MonitorStore: ObservableObject {
             lastCheckedAt: lastCheckedAt,
             lastCompletedState: lastCompletedState,
             sessionExpiresAt: sessionExpiresAt,
+            sessionExpiryOutlived: sessionExpiryOutlived,
             pollingIntervalMinutes: pollingIntervalMinutes,
             notificationPermission: notificationPermission,
             permissionAudit: permissionAudit,
@@ -389,6 +392,7 @@ public final class MonitorStore: ObservableObject {
         sessionExpiryStore?.save(expiryTracker.currentRecord)
         sessionStatistics = nil
         sessionExpiresAt = expiryTracker.estimatedExpiry(now: now())
+        sessionExpiryOutlived = expiryTracker.hasOutlivedEstimate(now: now())
         MonitorLog.store.info("session duration statistics reset")
     }
 

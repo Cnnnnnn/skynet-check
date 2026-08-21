@@ -23,7 +23,7 @@ final class SessionExpiryTests: XCTestCase {
 
     func testTrackerEstimatesUsingShortestObservation() {
         let start = Date(timeIntervalSince1970: 1_700_000_000)
-        var tracker = SessionExpiryTracker(
+        let tracker = SessionExpiryTracker(
             record: SessionExpiryRecord(
                 lastAuthenticatedAt: start,
                 durations: [7200, 3600, 9000]
@@ -36,12 +36,30 @@ final class SessionExpiryTests: XCTestCase {
         )
     }
 
-    func testTrackerWithoutHistoryCannotEstimate() {
+    func testTrackerRaisesLiveFloorWhenSessionOutlivesShortestSample() {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
         var tracker = SessionExpiryTracker(
+            record: SessionExpiryRecord(
+                lastAuthenticatedAt: start,
+                durations: [3600, 7200]
+            )
+        )
+        let later = start.addingTimeInterval(5000)
+
+        tracker.recordState(.authenticated(email: nil), at: later)
+
+        XCTAssertEqual(tracker.currentRecord.durations.sorted(), [5000, 7200])
+        XCTAssertNil(tracker.estimatedExpiry(now: later))
+        XCTAssertTrue(tracker.hasOutlivedEstimate(now: later))
+    }
+
+    func testTrackerWithoutHistoryCannotEstimate() {
+        let tracker = SessionExpiryTracker(
             record: SessionExpiryRecord(lastAuthenticatedAt: Date())
         )
 
         XCTAssertNil(tracker.estimatedExpiry(now: Date()))
+        XCTAssertFalse(tracker.hasOutlivedEstimate(now: Date()))
     }
 
     func testTrackerKeepsOnlyRecentDurations() {
@@ -168,6 +186,42 @@ final class SessionExpiryTests: XCTestCase {
         XCTAssertEqual(DurationPresentation.summarize(7200), "2.0 小时")
         XCTAssertEqual(DurationPresentation.summarize(45 * 60), "45 分钟")
         XCTAssertEqual(DurationPresentation.summarize(90 * 60), "1.5 小时")
+    }
+
+    func testPresentationDistinguishesUpcomingAndPastEstimates() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let upcoming = now.addingTimeInterval(1800)
+        let past = now.addingTimeInterval(-600)
+
+        XCTAssertEqual(
+            SessionExpiryPresentation.panelLabel(expiresAt: upcoming, now: now),
+            MonitorText.SessionExpiry.panelUpcoming(
+                upcoming.formatted(date: .omitted, time: .shortened)
+            )
+        )
+        XCTAssertEqual(
+            SessionExpiryPresentation.panelLabel(expiresAt: past, now: now),
+            MonitorText.SessionExpiry.panelPast(
+                past.formatted(date: .omitted, time: .shortened)
+            )
+        )
+        XCTAssertTrue(
+            SessionExpiryPresentation.diagnosticsLine(expiresAt: past, now: now)
+                .contains("以 CLI 状态为准")
+        )
+    }
+
+    func testAdvisorSkipsNotificationWhenEstimateAlreadyPast() {
+        var advisor = SessionExpiryAdvisor()
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+
+        XCTAssertNil(
+            advisor.evaluate(
+                estimatedExpiry: now.addingTimeInterval(-60),
+                sessionStartedAt: now.addingTimeInterval(-7200),
+                now: now
+            )
+        )
     }
 
     func testNetworkStabilityTracksOutageWindows() {

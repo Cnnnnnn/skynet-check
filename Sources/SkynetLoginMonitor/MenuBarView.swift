@@ -55,6 +55,10 @@ struct MenuBarView: View {
                     .lineLimit(1)
             }
 
+            Text(MonitorText.SessionExpiry.scopeCaption)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+
             VStack(alignment: .leading, spacing: 4) {
                 if let cliVersion = store.cliVersion {
                     Label("CLI \(cliVersion)", systemImage: "terminal")
@@ -74,7 +78,12 @@ struct MenuBarView: View {
                 }
                 if let sessionExpiresAt = store.sessionExpiresAt {
                     Label(
-                        "预计过期：\(sessionExpiresAt.formatted(date: .omitted, time: .shortened))",
+                        SessionExpiryPresentation.panelLabel(expiresAt: sessionExpiresAt),
+                        systemImage: "clock.badge.exclamationmark"
+                    )
+                } else if store.sessionExpiryOutlived {
+                    Label(
+                        MonitorText.SessionExpiry.panelOutlived,
                         systemImage: "clock.badge.exclamationmark"
                     )
                 }

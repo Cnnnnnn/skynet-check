@@ -32,11 +32,47 @@ final class DiagnosticsComposerTests: XCTestCase {
         XCTAssertTrue(report.contains("应用版本：0.3.0"))
         XCTAssertTrue(report.contains("当前状态：已登录"))
         XCTAssertTrue(report.contains("会话预计过期"))
+        XCTAssertTrue(report.contains("基于历史观察估算"))
         XCTAssertTrue(report.contains("自动检查间隔：15 分钟"))
         XCTAssertTrue(report.contains("通知权限：已授权"))
         XCTAssertTrue(report.contains("配置权限：目录 700"))
         XCTAssertTrue(report.contains("- Skynet CLI：/opt/homebrew/bin/skynet"))
         XCTAssertTrue(report.contains("- Node.js：v22.23.2"))
+    }
+
+    func testPastSessionEstimateMarksCLIAsAuthority() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let report = DiagnosticsComposer.compose(
+            appVersion: nil,
+            state: .authenticated(email: nil),
+            lastCheckedAt: now,
+            lastCompletedState: .authenticated(email: nil),
+            sessionExpiresAt: now.addingTimeInterval(-3600),
+            pollingIntervalMinutes: 15,
+            notificationPermission: .authorized,
+            permissionAudit: nil,
+            environment: nil,
+            now: now
+        )
+
+        XCTAssertTrue(report.contains("以 CLI 状态为准"))
+    }
+
+    func testOutlivedEstimateUsesDedicatedDiagnosticsLine() {
+        let report = DiagnosticsComposer.compose(
+            appVersion: nil,
+            state: .authenticated(email: nil),
+            lastCheckedAt: nil,
+            lastCompletedState: nil,
+            sessionExpiresAt: nil,
+            sessionExpiryOutlived: true,
+            pollingIntervalMinutes: 15,
+            notificationPermission: .authorized,
+            permissionAudit: nil,
+            environment: nil
+        )
+
+        XCTAssertTrue(report.contains("已超过历史最短估算"))
     }
 
     func testIncludesConfigSummaryAndCheckDurations() {

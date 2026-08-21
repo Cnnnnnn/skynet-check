@@ -33,11 +33,29 @@ public enum MonitorText {
             let time = expiresAt.formatted(date: .omitted, time: .shortened)
             switch stage {
             case .warning:
-                return "预计 \(time) 过期，建议尽快重新登录。"
+                return "按历史估算约 \(time) 过期，可点「立即检查」确认。"
             case .urgent:
-                return "预计 \(time) 过期，请立即重新登录。"
+                return "按历史估算约 \(time) 过期，建议确认 CLI 状态或重新登录。"
             }
         }
+    }
+
+    public enum SessionExpiry {
+        public static func panelUpcoming(_ time: String) -> String {
+            "预计过期：\(time)"
+        }
+        public static func panelPast(_ time: String) -> String {
+            "估算已过期（\(time)）· 以 CLI 为准"
+        }
+        public static let panelOutlived = "已超过历史最短估算 · 以 CLI 为准"
+        public static func diagnosticsUpcoming(_ stamp: String) -> String {
+            "会话预计过期：\(stamp)（基于历史观察估算）"
+        }
+        public static func diagnosticsPast(_ stamp: String) -> String {
+            "会话预计过期：\(stamp)（估算已过，以 CLI 状态为准）"
+        }
+        public static let diagnosticsOutlived = "会话预计过期：已超过历史最短估算（以 CLI 状态为准）"
+        public static let scopeCaption = "仅监控本地 CLI，与网页登录无关"
     }
 
     public enum NotificationAction {

@@ -3,6 +3,21 @@
 All notable changes to this project are documented in this file. Versions
 follow the newest `v*` git tag; the build number is the commit count.
 
+## [Unreleased]
+
+### Changed
+
+- Past session-expiry estimates no longer look like a live deadline:
+  the panel shows "估算已过期 · 以 CLI 为准", diagnostics say the same,
+  and "即将/马上过期" notifications are suppressed once the estimate
+  is already behind wall-clock.
+- Sessions that outlive the shortest historical sample raise that lower
+  bound live; the panel then shows "已超过历史最短估算 · 以 CLI 为准"
+  instead of a frozen past clock.
+- Panel caption clarifies monitoring is CLI-only, not the web login page.
+- Expiring notifications use softer copy (confirm / optional re-login)
+  instead of urging an immediate re-login.
+
 ## [0.6.0] - 2026-08-21
 
 ### Fixed

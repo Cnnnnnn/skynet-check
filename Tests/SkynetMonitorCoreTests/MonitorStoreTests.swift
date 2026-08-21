@@ -334,6 +334,28 @@ final class MonitorStoreTests: XCTestCase {
         )
     }
 
+    func testRefreshMarksOutlivedEstimateWhenPastHistoricalShortest() async {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let store = MonitorStore(
+            checker: StoreFakeChecker(results: [.authenticated(email: nil)]),
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: true),
+            notifier: StoreFakeNotifier(),
+            periodicInterval: nil,
+            sessionExpiryStore: StoreFakeSessionExpiryStore(
+                record: SessionExpiryRecord(
+                    lastAuthenticatedAt: now.addingTimeInterval(-5000),
+                    durations: [3600]
+                )
+            ),
+            now: { now }
+        )
+
+        await store.refresh()
+
+        XCTAssertNil(store.sessionExpiresAt)
+        XCTAssertTrue(store.sessionExpiryOutlived)
+    }
+
     func testRefreshCapturesSessionDurationWhenExpiryDetected() async {
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         let expiryStore = StoreFakeSessionExpiryStore(

@@ -11,6 +11,7 @@ public enum DiagnosticsComposer {
         lastCheckedAt: Date?,
         lastCompletedState: LoginState?,
         sessionExpiresAt: Date?,
+        sessionExpiryOutlived: Bool = false,
         pollingIntervalMinutes: Int,
         notificationPermission: NotificationPermissionStatus,
         permissionAudit: SkynetPermissionAudit?,
@@ -36,7 +37,14 @@ public enum DiagnosticsComposer {
             )
         }
         if let sessionExpiresAt {
-            lines.append("会话预计过期：\(format(sessionExpiresAt))（基于历史观察估算）")
+            lines.append(
+                SessionExpiryPresentation.diagnosticsLine(
+                    expiresAt: sessionExpiresAt,
+                    now: now
+                )
+            )
+        } else if sessionExpiryOutlived {
+            lines.append(MonitorText.SessionExpiry.diagnosticsOutlived)
         }
         lines.append("自动检查间隔：\(pollingIntervalMinutes) 分钟")
         lines.append("通知权限：\(notificationPermission.diagnosticDetail)")

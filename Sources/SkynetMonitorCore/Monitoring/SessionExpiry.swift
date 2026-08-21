@@ -98,6 +98,26 @@ public enum DurationPresentation {
     }
 }
 
+// Panel / diagnostics copy for the estimated expiry. Once wall-clock passes
+// the estimate the number is stale noise; keep it but say CLI wins.
+public enum SessionExpiryPresentation {
+    public static func panelLabel(expiresAt: Date, now: Date = Date()) -> String {
+        let time = expiresAt.formatted(date: .omitted, time: .shortened)
+        if expiresAt > now {
+            return MonitorText.SessionExpiry.panelUpcoming(time)
+        }
+        return MonitorText.SessionExpiry.panelPast(time)
+    }
+
+    public static func diagnosticsLine(expiresAt: Date, now: Date = Date()) -> String {
+        let stamp = expiresAt.formatted(date: .abbreviated, time: .shortened)
+        if expiresAt > now {
+            return MonitorText.SessionExpiry.diagnosticsUpcoming(stamp)
+        }
+        return MonitorText.SessionExpiry.diagnosticsPast(stamp)
+    }
+}
+
 public struct SessionExpiryTracker: Sendable {
     private var record: SessionExpiryRecord
 
@@ -119,6 +139,8 @@ public struct SessionExpiryTracker: Sendable {
         case .authenticated:
             if record.lastAuthenticatedAt == nil {
                 record.lastAuthenticatedAt = date
+            } else {
+                raiseLiveFloor(at: date)
             }
         case .unauthenticated:
             if let startedAt = record.lastAuthenticatedAt {
@@ -136,13 +158,44 @@ public struct SessionExpiryTracker: Sendable {
         }
     }
 
+    // A session that outlives the shortest sample has already proven a
+    // higher lower bound; bump that sample so the estimate cannot freeze
+    // in the past while CLI still reports authenticated.
+    private mutating func raiseLiveFloor(at date: Date) {
+        guard let startedAt = record.lastAuthenticatedAt,
+              let minIndex = record.durations.indices.min(by: {
+                  record.durations[$0] < record.durations[$1]
+              })
+        else {
+            return
+        }
+        let elapsed = date.timeIntervalSince(startedAt)
+        if elapsed > record.durations[minIndex] {
+            record.durations[minIndex] = elapsed
+        }
+    }
+
     public func estimatedExpiry(now: Date) -> Date? {
         guard let startedAt = record.lastAuthenticatedAt,
               let duration = record.conservativeDuration
         else {
             return nil
         }
-        return startedAt.addingTimeInterval(duration)
+        let estimated = startedAt.addingTimeInterval(duration)
+        // Zero/negative remaining is not a useful deadline — hide it.
+        guard estimated > now else {
+            return nil
+        }
+        return estimated
+    }
+
+    // True when this login period has history but no future deadline left
+    // (typically after raiseLiveFloor caught the estimate up to "now").
+    public func hasOutlivedEstimate(now: Date) -> Bool {
+        guard record.lastAuthenticatedAt != nil, !record.durations.isEmpty else {
+            return false
+        }
+        return estimatedExpiry(now: now) == nil
     }
 }
 
@@ -192,6 +245,11 @@ public struct SessionExpiryAdvisor: Sendable {
         }
 
         let remaining = estimatedExpiry.timeIntervalSince(now)
+        // Past the estimate while still authenticated means the heuristic
+        // already failed; nagging "about to expire" would be a false alarm.
+        guard remaining > 0 else {
+            return nil
+        }
         if remaining <= Self.urgentInterval, !notifiedStages.contains(.urgent) {
             notifiedStages.insert(.urgent)
             return .urgent
