@@ -156,7 +156,9 @@ struct MenuBarView: View {
                 ComponentUpdateCardView(
                     phase: store.skillUpdatePhase,
                     skillReport: store.skillUpdateReport,
+                    skillFailureDetail: store.skillUpdateFailureDetail,
                     mcpFindings: store.mcpVersionFindings,
+                    checkedAt: store.componentUpdateCheckedAt,
                     onRecheck: { Task { await store.checkComponentUpdates() } }
                 )
             }

@@ -8,7 +8,9 @@ import SwiftUI
 struct ComponentUpdateCardView: View {
     let phase: ComponentUpdatePhase
     let skillReport: SkillUpdateReport?
+    let skillFailureDetail: String?
     let mcpFindings: [McpVersionFinding]
+    let checkedAt: Date?
     let onRecheck: () -> Void
 
     @State private var isExpanded = false
@@ -69,6 +71,31 @@ struct ComponentUpdateCardView: View {
 
     @ViewBuilder
     private var contentRows: some View {
+        statusRow
+        skillRows
+        mcpRows
+        pinUpgradeRow
+        if let checkedAt {
+            Label(
+                MonitorText.ComponentUpdate.lastChecked(
+                    checkedAt.formatted(date: .omitted, time: .shortened)
+                ),
+                systemImage: "clock"
+            )
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+        }
+        Button("重新检查") {
+            onRecheck()
+        }
+        .buttonStyle(.borderless)
+        .font(.caption)
+    }
+
+    // Status text sits above the (possibly stale) data: a fresh check in
+    // flight or a failure does not hide the last known list.
+    @ViewBuilder
+    private var statusRow: some View {
         switch phase {
         case .checking:
             Text(MonitorText.ComponentUpdate.checking)
@@ -78,13 +105,19 @@ struct ComponentUpdateCardView: View {
             Text(MonitorText.ComponentUpdate.needsLogin)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-        case .idle, .failed:
-            Text(MonitorText.ComponentUpdate.failed)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        case .completed:
-            skillRows
-            mcpRows
+        case .failed:
+            VStack(alignment: .leading, spacing: 2) {
+                Text(MonitorText.ComponentUpdate.failed)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let skillFailureDetail, !skillFailureDetail.isEmpty {
+                    Text("\(MonitorText.ComponentUpdate.failureReasonPrefix)\(skillFailureDetail)")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                }
+            }
+        case .idle, .completed:
+            EmptyView()
         }
     }
 
@@ -174,6 +207,61 @@ struct ComponentUpdateCardView: View {
         }
     }
 
+    // npx-pinned servers keep their version inside the ZCode config; the
+    // CLI's update tools cannot edit that file, so the actionable help is
+    // the new number and where to paste it.
+    @ViewBuilder
+    private var pinUpgradeRow: some View {
+        if let pinned = mcpFindings.first(where: { $0.isNPXPinned && $0.isUpgradable }) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Image(systemName: "square.and.pencil")
+                        .foregroundStyle(.orange)
+                        .accessibilityHidden(true)
+                    Text(MonitorText.ComponentUpdate.pinUpgradeTitle(pinned.serverName))
+                        .font(.caption)
+                }
+                Text(
+                    MonitorText.ComponentUpdate.pinUpgradeDetail(
+                        package: pinned.packageName ?? "",
+                        from: pinned.installedVersion ?? "",
+                        to: pinned.latestVersion ?? ""
+                    )
+                )
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Button(
+                        MonitorText.ComponentUpdate.copyNewVersion(
+                            pinned.latestVersion ?? ""
+                        )
+                    ) {
+                        copyToPasteboard(pinned.latestVersion ?? "")
+                    }
+                    .controlSize(.small)
+                    Button(MonitorText.ComponentUpdate.revealConfig) {
+                        revealConfigFile()
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                }
+            }
+        }
+    }
+
+    private func copyToPasteboard(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    private func revealConfigFile() {
+        let configURL = URL(
+            fileURLWithPath: ("~/.zcode/cli/config.json" as NSString)
+                .expandingTildeInPath
+        )
+        NSWorkspace.shared.activateFileViewerSelecting([configURL])
+    }
+
     private func mcpRow(_ finding: McpVersionFinding) -> some View {
         HStack(spacing: 6) {
             Image(
@@ -231,14 +319,16 @@ struct ComponentUpdateCardView: View {
         from: String,
         to: String
     ) -> some View {
-        HStack(spacing: 6) {
+        HStack(alignment: .top, spacing: 6) {
             Image(systemName: "arrow.up.circle.fill")
                 .foregroundStyle(.orange)
                 .accessibilityHidden(true)
             Text(title)
                 .font(.caption)
-                .lineLimit(1)
-            Spacer()
+                .lineLimit(2)
+                .truncationMode(.middle)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 6)
             Text("\(from) → \(to)")
                 .font(.caption2)
                 .foregroundStyle(.secondary)

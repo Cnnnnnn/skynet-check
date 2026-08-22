@@ -28,6 +28,8 @@ public final class MonitorStore: ObservableObject {
     @Published public private(set) var skillUpdatePhase: ComponentUpdatePhase = .idle
     @Published public private(set) var skillUpdateReport: SkillUpdateReport?
     @Published public private(set) var mcpVersionFindings: [McpVersionFinding] = []
+    @Published public private(set) var skillUpdateFailureDetail: String?
+    @Published public private(set) var componentUpdateCheckedAt: Date?
 
     private let checker: any SkynetAuthChecking
     private let networkMonitor: any NetworkMonitoring
@@ -50,6 +52,7 @@ public final class MonitorStore: ObservableObject {
     private let configReader: SkynetConfigReader?
     private let skillUpdateChecker: (any SkillUpdateChecking)?
     private let mcpVersionChecker: (any McpVersionChecking)?
+    private let componentUpdateStore: (any ComponentUpdateSnapshotStoring)?
     private var expiryTracker: SessionExpiryTracker
     private var expiryAdvisor = SessionExpiryAdvisor()
     private var periodicTask: Task<Void, Never>?
@@ -78,6 +81,7 @@ public final class MonitorStore: ObservableObject {
         configReader: SkynetConfigReader? = nil,
         skillUpdateChecker: (any SkillUpdateChecking)? = nil,
         mcpVersionChecker: (any McpVersionChecking)? = nil,
+        componentUpdateStore: (any ComponentUpdateSnapshotStoring)? = nil,
         updateChecker: (any AppUpdateChecking)? = nil,
         currentAppVersion: String? = nil,
         now: @escaping @Sendable () -> Date = Date.init
@@ -99,6 +103,7 @@ public final class MonitorStore: ObservableObject {
         self.configReader = configReader
         self.skillUpdateChecker = skillUpdateChecker
         self.mcpVersionChecker = mcpVersionChecker
+        self.componentUpdateStore = componentUpdateStore
         self.expiryTracker = SessionExpiryTracker(
             record: sessionExpiryStore?.load() ?? SessionExpiryRecord()
         )
@@ -120,6 +125,18 @@ public final class MonitorStore: ObservableObject {
         }
         sessionExpiryOutlived = expiryTracker.hasOutlivedEstimate(now: now())
         sessionStatistics = expiryTracker.currentRecord.statistics
+
+        // Show the last component-version result immediately; the check
+        // fired by start()'s inspectEnvironment replaces it with fresh data.
+        if let snapshot = componentUpdateStore?.load() {
+            skillUpdatePhase = snapshot.skillPhase
+            skillUpdateReport = snapshot.skillReport
+            mcpVersionFindings = snapshot.mcpFindings
+            componentUpdateCheckedAt = snapshot.savedAt
+            MonitorLog.store.info(
+                "restored last component-version check from snapshot"
+            )
+        }
     }
 
     public func start() async {
@@ -183,6 +200,7 @@ public final class MonitorStore: ObservableObject {
             notifyCurrentResult = pendingResultNotification
             pendingResultNotification = false
         } while refreshPending
+        maybeRecheckComponentUpdates()
     }
 
     public func login() async {
@@ -404,12 +422,15 @@ public final class MonitorStore: ObservableObject {
             case .needsLogin:
                 skillUpdatePhase = .needsLogin
                 skillUpdateReport = nil
+                skillUpdateFailureDetail = nil
             case let .completed(report):
                 skillUpdatePhase = .completed
                 skillUpdateReport = report
-            case .failed:
+                skillUpdateFailureDetail = nil
+            case let .failed(reason):
                 skillUpdatePhase = .failed
                 skillUpdateReport = nil
+                skillUpdateFailureDetail = reason
             }
             MonitorLog.store.info(
                 "skill update check: \(skills.logLabel, privacy: .public)"
@@ -421,7 +442,33 @@ public final class MonitorStore: ObservableObject {
                 "mcp version check: \(mcps.count, privacy: .public) server(s)"
             )
         }
+        componentUpdateCheckedAt = now()
+        componentUpdateStore?.save(
+            ComponentUpdateSnapshot(
+                savedAt: componentUpdateCheckedAt!,
+                skillPhase: skillUpdatePhase,
+                skillReport: skillUpdateReport,
+                mcpFindings: mcpVersionFindings
+            )
+        )
         componentUpdateInProgress = false
+    }
+
+    // Component versions drift on a daily cadence; piggyback on any
+    // completed refresh (periodic, manual, wake, network recovery) but at
+    // most once every two hours.
+    private static let componentRecheckInterval: TimeInterval = 2 * 60 * 60
+
+    private func maybeRecheckComponentUpdates() {
+        guard skillUpdateChecker != nil || mcpVersionChecker != nil else {
+            return
+        }
+        if let lastChecked = componentUpdateCheckedAt,
+           now().timeIntervalSince(lastChecked) < Self.componentRecheckInterval
+        {
+            return
+        }
+        Task { await checkComponentUpdates() }
     }
 
     // The component card appears once a check has produced anything to say;

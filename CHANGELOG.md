@@ -10,6 +10,14 @@ follow the newest `v*` git tag; the build number is the commit count.
 - A successful login automatically re-runs the component-version check
   when it was waiting for login, instead of keeping the needs-login hint
   until a manual recheck.
+- The last component-version result is persisted and shown immediately
+  on launch (with its check time) while a fresh check runs; completed
+  login checks also piggyback a re-check at most once every two hours.
+- npx-pinned MCP entries whose pin fell behind offer "复制新版本号" and
+  a Finder reveal of the config file — the CLI's update tools cannot
+  edit the ZCode config pin.
+- Skill update failures now show a reason; a check that resolved zero
+  skills is reported as failed instead of "all current".
 
 ### Changed
 
@@ -19,6 +27,8 @@ follow the newest `v*` git tag; the build number is the commit count.
 - The "检查更新" row is hidden while no update manifest URL is
   configured (`AppConfiguration.updateManifestURL` is now optional), so
   the panel no longer offers a check that can only fail.
+- Long skill names in the "组件版本" card wrap to two lines with
+  middle truncation instead of a clipped single line.
 - The "组件版本" card keeps the first three upgradable skills visible and
   folds the rest behind a "查看更多" disclosure inside the card.
 

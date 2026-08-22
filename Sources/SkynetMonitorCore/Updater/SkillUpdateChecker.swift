@@ -1,6 +1,6 @@
 import Foundation
 
-public struct SkillUpdate: Equatable, Sendable {
+public struct SkillUpdate: Codable, Equatable, Sendable {
     public let name: String
     public let installedVersion: String
     public let latestVersion: String
@@ -12,7 +12,7 @@ public struct SkillUpdate: Equatable, Sendable {
     }
 }
 
-public struct SkillUpdateReport: Equatable, Sendable {
+public struct SkillUpdateReport: Codable, Equatable, Sendable {
     public let totalChecked: Int
     public let updates: [SkillUpdate]
 
@@ -25,7 +25,8 @@ public struct SkillUpdateReport: Equatable, Sendable {
 public enum SkillUpdateCheckResult: Equatable, Sendable {
     case needsLogin
     case completed(SkillUpdateReport)
-    case failed
+    // nil reason keeps "failed" usable without a diagnosis.
+    case failed(reason: String?)
 
     var logLabel: String {
         switch self {
@@ -33,15 +34,15 @@ public enum SkillUpdateCheckResult: Equatable, Sendable {
             "needs login"
         case let .completed(report):
             "completed, \(report.updates.count) of \(report.totalChecked) upgradable"
-        case .failed:
-            "failed"
+        case let .failed(reason):
+            "failed (\(reason ?? "unknown"))"
         }
     }
 }
 
 // Panel-facing phase for the component-version card; the detailed lists are
 // carried by the separate published findings.
-public enum ComponentUpdatePhase: Equatable, Sendable {
+public enum ComponentUpdatePhase: Codable, Equatable, Sendable {
     case idle
     case checking
     case needsLogin
@@ -261,7 +262,7 @@ public actor SkillUpdateChecker: SkillUpdateChecking {
             return .needsLogin
         }
         guard let baseline = loadBaseline() else {
-            return .failed
+            return .failed(reason: "无法读取 skill lock 文件")
         }
         // Versions the comparator cannot parse carry no ordering, so they
         // cannot be judged outdated either way — skip instead of guessing.
@@ -269,7 +270,7 @@ public actor SkillUpdateChecker: SkillUpdateChecking {
             .filter { _, version in SemanticVersion(version) != nil }
             .sorted { $0.key < $1.key }
         guard !tracked.isEmpty else {
-            return .failed
+            return .failed(reason: "lock 文件里没有可识别的版本")
         }
 
         // The list endpoint answers for ~every skill in a couple of pages;
@@ -290,6 +291,16 @@ public actor SkillUpdateChecker: SkillUpdateChecking {
                     latestVersions[name] = latest
                 }
             }
+        }
+
+        // Nothing resolved at all means the platform was unreachable (or
+        // the login went stale between checks) — reporting "all current"
+        // on zero data would be a false clean bill.
+        let resolvedCount = tracked
+            .filter { latestVersions[$0.key] != nil }
+            .count
+        guard resolvedCount > 0 else {
+            return .failed(reason: "无法从 Skynet 平台获取版本（网络或登录态问题）")
         }
 
         let updates = tracked.compactMap { name, installed -> SkillUpdate? in

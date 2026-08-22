@@ -34,6 +34,7 @@ struct SkynetLoginMonitorApp: App {
             mcpVersionChecker: McpVersionChecker(
                 registry: HTTPNpmRegistryClient()
             ),
+            componentUpdateStore: ComponentUpdateSnapshotStore(),
             updateChecker: AppConfiguration.updateManifestURL.map {
                 HTTPAppUpdateChecker(manifestURL: $0)
             },

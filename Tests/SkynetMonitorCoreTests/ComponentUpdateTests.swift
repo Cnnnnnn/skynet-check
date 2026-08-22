@@ -220,15 +220,17 @@ final class ComponentUpdateTests: XCTestCase {
 
         let result = await checker.checkForUpdates()
 
-        XCTAssertEqual(result, .failed)
+        XCTAssertEqual(result, .failed(reason: "无法读取 skill lock 文件"))
     }
 
     func testSkillCheckerTreatsFetchErrorsAsUnknown() async throws {
         let lockURL = writeTemporaryFile(
             json: #"{"fe-api-gen": {"version": "v10"}, "gone-skill": {"version": "v1"}}"#
         )
-        let client = StubPlatformClient(token: "session-token", latest: [:])
-        client.failingSkills = ["fe-api-gen", "gone-skill"]
+        let client = StubPlatformClient(token: "session-token", latest: ["fe-api-gen": "v10"])
+        // One name resolves, one fails: the check still completes and the
+        // unresolved one is simply not judged.
+        client.failingSkills = ["gone-skill"]
         let checker = SkillUpdateChecker(lockURL: lockURL, client: client)
 
         let result = await checker.checkForUpdates()
@@ -665,7 +667,164 @@ final class ComponentUpdateTests: XCTestCase {
         XCTAssertTrue(needsLogin.contains("组件版本：Skill 更新检测需登录后可用"))
     }
 
+    func testSkillCheckerFailsWhenNothingResolved() async throws {
+        let lockURL = writeTemporaryFile(
+            json: #"{"fe-api-gen": {"version": "v10"}}"#
+        )
+        let client = StubPlatformClient(token: "session-token", latest: [:])
+        client.failingSkills = ["fe-api-gen"]
+        let checker = SkillUpdateChecker(lockURL: lockURL, client: client)
+
+        let result = await checker.checkForUpdates()
+
+        // Zero resolved names must not masquerade as "everything current".
+        XCTAssertEqual(
+            result,
+            .failed(reason: "无法从 Skynet 平台获取版本（网络或登录态问题）")
+        )
+    }
+
+    // MARK: - snapshot cache
+
+    func testSnapshotStoreRoundTrips() {
+        let defaults = UserDefaults(
+            suiteName: "component-update-tests-\(UUID().uuidString)"
+        )!
+        let store = ComponentUpdateSnapshotStore(defaults: defaults)
+        let savedAt = Date(timeIntervalSince1970: 1_755_800_000)
+        let snapshot = ComponentUpdateSnapshot(
+            savedAt: savedAt,
+            skillPhase: .completed,
+            skillReport: SkillUpdateReport(
+                totalChecked: 3,
+                updates: [
+                    SkillUpdate(name: "a", installedVersion: "v1", latestVersion: "v2"),
+                ]
+            ),
+            mcpFindings: [
+                McpVersionFinding(
+                    serverName: "banking",
+                    packageName: "@shopee/banking-fe-mcp",
+                    installedVersion: "0.2.27",
+                    latestVersion: "0.2.29",
+                    isNPXPinned: true
+                ),
+            ]
+        )
+
+        store.save(snapshot)
+
+        XCTAssertEqual(store.load(), snapshot)
+    }
+
+    @MainActor
+    func testStoreRestoresSnapshotOnInitAndSavesAfterCheck() async {
+        let defaults = UserDefaults(
+            suiteName: "component-update-tests-\(UUID().uuidString)"
+        )!
+        let snapshotStore = ComponentUpdateSnapshotStore(defaults: defaults)
+        let savedAt = Date(timeIntervalSince1970: 1_755_800_000)
+        snapshotStore.save(
+            ComponentUpdateSnapshot(
+                savedAt: savedAt,
+                skillPhase: .completed,
+                skillReport: SkillUpdateReport(totalChecked: 7, updates: []),
+                mcpFindings: []
+            )
+        )
+        let restored = makeStore(
+            skillChecker: MutableSkillUpdateChecker(),
+            snapshotStore: snapshotStore
+        )
+
+        XCTAssertEqual(restored.skillUpdatePhase, .completed)
+        XCTAssertEqual(restored.skillUpdateReport?.totalChecked, 7)
+        XCTAssertEqual(restored.componentUpdateCheckedAt, savedAt)
+
+        let checker = MutableSkillUpdateChecker()
+        let active = makeStore(
+            skillChecker: checker,
+            snapshotStore: snapshotStore
+        )
+        checker.result = .completed(
+            SkillUpdateReport(totalChecked: 9, updates: [])
+        )
+        await active.checkComponentUpdates()
+
+        let saved = snapshotStore.load()
+        XCTAssertEqual(saved?.skillReport?.totalChecked, 9)
+        // Snapshots encode whole seconds; compare with second-level accuracy.
+        XCTAssertEqual(
+            active.componentUpdateCheckedAt?.timeIntervalSince1970 ?? 0,
+            saved?.savedAt.timeIntervalSince1970 ?? 0,
+            accuracy: 1.0
+        )
+    }
+
+    @MainActor
+    func testRefreshRechecksComponentsOnlyWhenDue() async throws {
+        final class MutableClock: @unchecked Sendable {
+            var date = Date(timeIntervalSince1970: 1_755_800_000)
+        }
+        let clock = MutableClock()
+        let checker = MutableSkillUpdateChecker()
+        checker.result = .completed(
+            SkillUpdateReport(totalChecked: 1, updates: [])
+        )
+        let store = MonitorStore(
+            checker: StubChecker(),
+            networkMonitor: StubNetworkMonitor(),
+            notifier: StubNotifier(),
+            periodicInterval: nil,
+            skillUpdateChecker: checker,
+            now: { clock.date }
+        )
+
+        await store.checkComponentUpdates()
+        XCTAssertEqual(checker.callCount, 1)
+
+        await store.refresh()
+        XCTAssertEqual(checker.callCount, 1, "not due within two hours")
+
+        clock.date = clock.date.addingTimeInterval(2 * 60 * 60 + 60)
+        await store.refresh()
+        for _ in 0..<200 where checker.callCount < 2 {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertEqual(checker.callCount, 2, "due after two hours")
+    }
+
+    @MainActor
+    func testFailedReasonIsPublished() async {
+        let checker = MutableSkillUpdateChecker()
+        checker.result = .failed(reason: "无法读取 skill lock 文件")
+        let store = makeStore(skillChecker: checker)
+
+        await store.checkComponentUpdates()
+
+        XCTAssertEqual(store.skillUpdatePhase, .failed)
+        XCTAssertEqual(
+            store.skillUpdateFailureDetail,
+            "无法读取 skill lock 文件"
+        )
+    }
+
     // MARK: - helpers
+
+    @MainActor
+    private func makeStore(
+        skillChecker: MutableSkillUpdateChecker,
+        snapshotStore: ComponentUpdateSnapshotStore? = nil
+    ) -> MonitorStore {
+        MonitorStore(
+            checker: StubChecker(),
+            networkMonitor: StubNetworkMonitor(),
+            notifier: StubNotifier(),
+            periodicInterval: nil,
+            skillUpdateChecker: skillChecker,
+            componentUpdateStore: snapshotStore
+        )
+    }
 
     private func writeTemporaryFile(json: String) -> URL {
         let url = FileManager.default.temporaryDirectory
@@ -733,10 +892,12 @@ private final class StubRegistry: NpmRegistryLatestFetching, @unchecked Sendable
 }
 
 private final class MutableSkillUpdateChecker: SkillUpdateChecking, @unchecked Sendable {
-    var result: SkillUpdateCheckResult = .failed
+    var result: SkillUpdateCheckResult = .failed(reason: nil)
+    private(set) var callCount = 0
 
     func checkForUpdates() async -> SkillUpdateCheckResult {
-        result
+        callCount += 1
+        return result
     }
 }
 

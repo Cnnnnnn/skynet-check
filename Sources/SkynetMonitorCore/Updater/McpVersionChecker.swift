@@ -65,25 +65,30 @@ public enum McpServerPlan: Equatable, Sendable {
     }
 }
 
-public struct McpVersionFinding: Equatable, Sendable {
+public struct McpVersionFinding: Codable, Equatable, Sendable {
     public let serverName: String
     public let packageName: String?
     public let installedVersion: String?
     public let latestVersion: String?
     public let unpinned: Bool
+    // True when the installed version is a pin written in the config file
+    // (npx -y pkg@version): upgrading means editing that pin, not npm.
+    public let isNPXPinned: Bool
 
     public init(
         serverName: String,
         packageName: String? = nil,
         installedVersion: String? = nil,
         latestVersion: String? = nil,
-        unpinned: Bool = false
+        unpinned: Bool = false,
+        isNPXPinned: Bool = false
     ) {
         self.serverName = serverName
         self.packageName = packageName
         self.installedVersion = installedVersion
         self.latestVersion = latestVersion
         self.unpinned = unpinned
+        self.isNPXPinned = isNPXPinned
     }
 
     public var isUpgradable: Bool {
@@ -461,7 +466,8 @@ public actor McpVersionChecker: McpVersionChecking {
                 serverName: entry.name,
                 packageName: package,
                 installedVersion: pinnedVersion,
-                latestVersion: await registry.latestVersion(of: package)
+                latestVersion: await registry.latestVersion(of: package),
+                isNPXPinned: true
             )
 
         case let .globalBinary(binaryName, binaryDirectory):

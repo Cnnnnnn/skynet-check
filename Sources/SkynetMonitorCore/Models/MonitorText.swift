@@ -180,5 +180,23 @@ public enum MonitorText {
         public static let unpinnedDetail = "未固定版本"
         public static let unavailableDetail = "无法确定"
         public static let upgradableSuffix = "可升级"
+        public static let failureReasonPrefix = "原因："
+        public static func lastChecked(_ time: String) -> String {
+            "上次检查 \(time)"
+        }
+        public static func pinUpgradeTitle(_ serverName: String) -> String {
+            "\(serverName) 的版本 pin 需手动更新"
+        }
+        public static func pinUpgradeDetail(
+            package: String,
+            from: String,
+            to: String
+        ) -> String {
+            "\(package)@\(from) → @\(to)（编辑 ~/.zcode/cli/config.json）"
+        }
+        public static func copyNewVersion(_ version: String) -> String {
+            "复制新版本号 \(version)"
+        }
+        public static let revealConfig = "在 Finder 中查看"
     }
 }
