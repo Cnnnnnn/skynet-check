@@ -424,6 +424,7 @@ final class ComponentUpdateTests: XCTestCase {
         )
         let checker = McpVersionChecker(
             configURL: configURL,
+            cursorConfigURL: nil,
             registry: registry,
             binarySearchPaths: []
         )
@@ -482,6 +483,7 @@ final class ComponentUpdateTests: XCTestCase {
         )
         let checker = McpVersionChecker(
             configURL: configURL,
+            cursorConfigURL: nil,
             registry: StubRegistry(versions: ["@shopee/skynet.bank-fe-flow": "0.8.9"]),
             binarySearchPaths: [alternateBin.path]
         )
@@ -809,6 +811,154 @@ final class ComponentUpdateTests: XCTestCase {
         )
     }
 
+    func testCursorConfigFindingsCarrySource() async throws {
+        let root = makeTemporaryDirectory()
+        let packageURL = root
+            .appendingPathComponent("lib/node_modules/@shopee/skynet-base")
+        try FileManager.default.createDirectory(
+            at: packageURL,
+            withIntermediateDirectories: true
+        )
+        try """
+        {"name":"@shopee/skynet-base","version":"2.6.0",
+         "bin":{"skynet-mcp":"dist/mcp.js"}}
+        """
+        .write(to: packageURL.appendingPathComponent("package.json"), atomically: true, encoding: .utf8)
+        let binURL = root.appendingPathComponent("bin")
+        try FileManager.default.createDirectory(
+            at: binURL,
+            withIntermediateDirectories: true
+        )
+        FileManager.default.createFile(
+            atPath: binURL.appendingPathComponent("skynet-mcp").path,
+            contents: nil
+        )
+
+        let zcodeConfig = writeTemporaryFile(
+            json: """
+            {"mcp":{"servers":{
+              "skynet-base":{"type":"stdio","command":"\(root.path)/bin/skynet-mcp","args":[]}
+            }}}
+            """
+        )
+        let cursorConfig = writeTemporaryFile(
+            json: """
+            {"mcpServers":{
+              "skynet-base":{"command":"\(root.path)/bin/skynet-mcp","args":[]}
+            }}
+            """
+        )
+        let checker = McpVersionChecker(
+            configURL: zcodeConfig,
+            cursorConfigURL: cursorConfig,
+            registry: StubRegistry(versions: ["@shopee/skynet-base": "2.12.2"]),
+            binarySearchPaths: []
+        )
+
+        let findings = await checker.checkVersions()
+
+        XCTAssertEqual(
+            findings.map { "\($0.serverName)|\($0.configSource)" },
+            [
+                "skynet-base|Cursor",
+                "skynet-base|ZCode",
+            ]
+        )
+        XCTAssertTrue(findings.allSatisfy(\.isUpgradable))
+    }
+
+    // MARK: - registry endpoints
+
+    func testResolveEndpointsPutsNpmrcRegistryFirst() {
+        let contents = """
+        registry=https://nexus.npt.seabank.io/repository/npm-bank/
+        //nexus.npt.seabank.io/repository/npm-bank/:_authToken=token-a
+        """
+
+        let endpoints = HTTPNpmRegistryClient.resolveEndpoints(
+            fromNpmrcContents: contents
+        )
+
+        XCTAssertEqual(endpoints.count, 2)
+        XCTAssertEqual(
+            endpoints.first?.url.absoluteString,
+            "https://nexus.npt.seabank.io/repository/npm-bank"
+        )
+        XCTAssertEqual(endpoints.first?.authHost, "nexus.npt.seabank.io")
+    }
+
+    func testResolveEndpointsDedupesAndFallsBack() {
+        // A registry matching a built-in collapses instead of duplicating.
+        let duplicate = HTTPNpmRegistryClient.resolveEndpoints(
+            fromNpmrcContents: "registry=https://npm.shopee.io/"
+        )
+        XCTAssertEqual(duplicate.count, 2)
+        XCTAssertEqual(duplicate.first?.authHost, "npm.shopee.io")
+
+        let none = HTTPNpmRegistryClient.resolveEndpoints(fromNpmrcContents: nil)
+        XCTAssertEqual(
+            none.map(\.authHost),
+            ["npm.shopee.io", "nexus.npt.seabank.io"]
+        )
+    }
+
+    // MARK: - component-update notification
+
+    @MainActor
+    func testComponentUpdateNotificationFiresOncePerEpisode() async {
+        let skillChecker = MutableSkillUpdateChecker()
+        let notifier = StubNotifier()
+        let mcpChecker = MutableMcpVersionChecker()
+        skillChecker.result = .completed(
+            SkillUpdateReport(
+                totalChecked: 10,
+                updates: [
+                    SkillUpdate(name: "a", installedVersion: "v1", latestVersion: "v2"),
+                ]
+            )
+        )
+        mcpChecker.findings = [
+            McpVersionFinding(
+                serverName: "skynet-base",
+                installedVersion: "2.11.5",
+                latestVersion: "2.12.2"
+            ),
+        ]
+        let store = MonitorStore(
+            checker: StubChecker(),
+            networkMonitor: StubNetworkMonitor(),
+            notifier: notifier,
+            periodicInterval: nil,
+            skillUpdateChecker: skillChecker,
+            mcpVersionChecker: mcpChecker
+        )
+
+        await store.checkComponentUpdates()
+        await store.checkComponentUpdates()
+        XCTAssertEqual(notifier.componentUpdateNotifications.count, 1)
+        XCTAssertEqual(notifier.componentUpdateNotifications.first?.skillCount, 1)
+        XCTAssertEqual(notifier.componentUpdateNotifications.first?.mcpCount, 1)
+
+        // Clean result re-arms the notification.
+        skillChecker.result = .completed(
+            SkillUpdateReport(totalChecked: 10, updates: [])
+        )
+        mcpChecker.findings = []
+        await store.checkComponentUpdates()
+        XCTAssertEqual(notifier.componentUpdateNotifications.count, 1)
+
+        skillChecker.result = .completed(
+            SkillUpdateReport(
+                totalChecked: 10,
+                updates: [
+                    SkillUpdate(name: "a", installedVersion: "v2", latestVersion: "v3"),
+                ]
+            )
+        )
+        await store.checkComponentUpdates()
+        XCTAssertEqual(notifier.componentUpdateNotifications.count, 2)
+    }
+
     // MARK: - helpers
 
     @MainActor
@@ -934,6 +1084,8 @@ private final class StubNetworkMonitor: NetworkMonitoring {
 
 @MainActor
 private final class StubNotifier: LoginNotifying {
+    private(set) var componentUpdateNotifications: [(skillCount: Int, mcpCount: Int)] = []
+
     func requestAuthorization() async {}
 
     func authorizationStatus() async -> NotificationPermissionStatus {
@@ -952,4 +1104,8 @@ private final class StubNotifier: LoginNotifying {
     func notifyCheckResult(_ state: LoginState) async {}
 
     func notifyLoginResult(_ result: LoginActionResult) async {}
+
+    func notifyComponentUpdatesAvailable(skillCount: Int, mcpCount: Int) async {
+        componentUpdateNotifications.append((skillCount, mcpCount))
+    }
 }

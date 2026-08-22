@@ -198,5 +198,19 @@ public enum MonitorText {
             "复制新版本号 \(version)"
         }
         public static let revealConfig = "在 Finder 中查看"
+        public static let updatesNotificationTitle = "Skynet 组件有可更新"
+        public static func updatesNotificationBody(
+            skillCount: Int,
+            mcpCount: Int
+        ) -> String {
+            var parts: [String] = []
+            if skillCount > 0 {
+                parts.append("\(skillCount) 个 Skill")
+            }
+            if mcpCount > 0 {
+                parts.append("\(mcpCount) 个 MCP")
+            }
+            return "\(parts.joined(separator: "、"))落后于最新版本，可在菜单栏面板查看。"
+        }
     }
 }

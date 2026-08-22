@@ -102,6 +102,12 @@ public protocol LoginNotifying: AnyObject {
     func notifyServiceTokenInvalid(key: String, name: String) async
     func notifyCheckResult(_ state: LoginState) async
     func notifyLoginResult(_ result: LoginActionResult) async
+    func notifyComponentUpdatesAvailable(skillCount: Int, mcpCount: Int) async
+}
+
+public extension LoginNotifying {
+    // Test doubles stay quiet unless they care about this event.
+    func notifyComponentUpdatesAvailable(skillCount: Int, mcpCount: Int) async {}
 }
 
 @MainActor
@@ -112,6 +118,7 @@ public final class LoginNotifier: NSObject, LoginNotifying,
     private static let expiringIdentifier = "skynet-session-expiring"
     private static let tokenInvalidPrefix = "skynet-token-invalid"
     private static let loginActionIdentifier = "skynet-login-action"
+    private static let componentUpdatesIdentifier = "skynet-component-updates"
     private let bundle: Bundle
     private let centerProvider: @MainActor () -> UNUserNotificationCenter
     public var onAction: (@MainActor (LoginNotificationAction) -> Void)?
@@ -296,6 +303,31 @@ public final class LoginNotifier: NSObject, LoginNotifying,
                 trigger: nil
             ),
             label: "login-action"
+        )
+    }
+
+    public func notifyComponentUpdatesAvailable(
+        skillCount: Int,
+        mcpCount: Int
+    ) async {
+        guard supportsUserNotifications else {
+            return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = MonitorText.ComponentUpdate.updatesNotificationTitle
+        content.body = MonitorText.ComponentUpdate.updatesNotificationBody(
+            skillCount: skillCount,
+            mcpCount: mcpCount
+        )
+        content.sound = .default
+
+        await post(
+            UNNotificationRequest(
+                identifier: Self.componentUpdatesIdentifier,
+                content: content,
+                trigger: nil
+            ),
+            label: "component-updates"
         )
     }
 

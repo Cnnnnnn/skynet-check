@@ -19,6 +19,24 @@ follow the newest `v*` git tag; the build number is the commit count.
 - Skill update failures now show a reason; a check that resolved zero
   skills is reported as failed instead of "all current".
 
+### Added
+
+- MCP version checking now also reads Cursor's ~/.cursor/mcp.json; the
+  same server wired into both IDEs shows as two findings tagged by
+  source, since each config can pin a different version.
+- A notification fires once per "fell behind" episode when skills or
+  MCPs drift (re-armed by a fully clean check).
+- HTTP clients are covered by URLProtocol tests (session cookie, list
+  pagination, endpoint order and fallback).
+
+### Fixed
+
+- Registry lookup URLs no longer double-encode the scoped package name
+  ("%2F" was being sent as "%252F"; the registries happened to tolerate
+  it).
+- Registry endpoints now lead with the ~/.npmrc default registry before
+  the built-in Skynet mirrors.
+
 ### Changed
 
 - Skill update checks page through the platform's list endpoint (up to

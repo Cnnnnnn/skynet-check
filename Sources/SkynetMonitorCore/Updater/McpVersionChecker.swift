@@ -74,6 +74,9 @@ public struct McpVersionFinding: Codable, Equatable, Sendable {
     // True when the installed version is a pin written in the config file
     // (npx -y pkg@version): upgrading means editing that pin, not npm.
     public let isNPXPinned: Bool
+    // Which IDE's MCP config the entry came from ("ZCode" / "Cursor") —
+    // the same package may be wired into both at different versions.
+    public let configSource: String
 
     public init(
         serverName: String,
@@ -81,7 +84,8 @@ public struct McpVersionFinding: Codable, Equatable, Sendable {
         installedVersion: String? = nil,
         latestVersion: String? = nil,
         unpinned: Bool = false,
-        isNPXPinned: Bool = false
+        isNPXPinned: Bool = false,
+        configSource: String = "ZCode"
     ) {
         self.serverName = serverName
         self.packageName = packageName
@@ -89,6 +93,7 @@ public struct McpVersionFinding: Codable, Equatable, Sendable {
         self.latestVersion = latestVersion
         self.unpinned = unpinned
         self.isNPXPinned = isNPXPinned
+        self.configSource = configSource
     }
 
     public var isUpgradable: Bool {
@@ -104,25 +109,15 @@ public struct McpVersionFinding: Codable, Equatable, Sendable {
 }
 
 public enum McpConfigParser {
-    // Reads the ZCode MCP config shape:
-    // {"mcp":{"servers":{"<name>":{"type":"stdio","command":…,"args":[…]}}}}
-    public static func parseServers(from data: Data) -> [McpServerEntry]? {
-        struct Server: Decodable {
-            let command: String?
-            let args: [String]?
-        }
-        struct Config: Decodable {
-            let mcp: MCP?
-            struct MCP: Decodable {
-                let servers: [String: Server]?
-            }
-        }
+    private struct Server: Decodable {
+        let command: String?
+        let args: [String]?
+    }
 
-        guard let config = try? JSONDecoder().decode(Config.self, from: data) else {
-            return nil
-        }
-        let servers = config.mcp?.servers ?? [:]
-        return servers
+    private static func entries(
+        from servers: [String: Server]
+    ) -> [McpServerEntry] {
+        servers
             .compactMap { name, server -> McpServerEntry? in
                 guard let command = server.command, !command.isEmpty else {
                     return nil
@@ -134,6 +129,36 @@ public enum McpConfigParser {
                 )
             }
             .sorted { $0.name < $1.name }
+    }
+
+    // Reads the ZCode MCP config shape:
+    // {"mcp":{"servers":{"<name>":{"type":"stdio","command":…,"args":[…]}}}}
+    public static func parseServers(from data: Data) -> [McpServerEntry]? {
+        struct Config: Decodable {
+            let mcp: MCP?
+            struct MCP: Decodable {
+                let servers: [String: Server]?
+            }
+        }
+
+        guard let config = try? JSONDecoder().decode(Config.self, from: data) else {
+            return nil
+        }
+        return entries(from: config.mcp?.servers ?? [:])
+    }
+
+    // Cursor keeps its MCP servers in ~/.cursor/mcp.json under
+    // {"mcpServers":{"<name>":{"command":…,"args":[…]}}} — same fields,
+    // different nesting.
+    public static func parseCursorServers(from data: Data) -> [McpServerEntry]? {
+        struct Config: Decodable {
+            let mcpServers: [String: Server]?
+        }
+
+        guard let config = try? JSONDecoder().decode(Config.self, from: data) else {
+            return nil
+        }
+        return entries(from: config.mcpServers ?? [:])
     }
 }
 
@@ -243,7 +268,7 @@ public protocol NpmRegistryLatestFetching: Sendable {
 // banking-fe-mcp package only exists on the Nexus bank registry, so both
 // are probed in order.
 public actor HTTPNpmRegistryClient: NpmRegistryLatestFetching {
-    public struct Endpoint: Sendable {
+    public struct Endpoint: Equatable, Sendable {
         let url: URL
         let authHost: String
 
@@ -258,7 +283,30 @@ public actor HTTPNpmRegistryClient: NpmRegistryLatestFetching {
     private let session: URLSession
 
     public init(
-        endpoints: [Endpoint] = [
+        endpoints: [Endpoint]? = nil,
+        npmrcURL: URL? = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".npmrc"),
+        session: URLSession = URLSession(configuration: {
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.timeoutIntervalForRequest = 10
+            return configuration
+        }())
+    ) {
+        self.endpoints = endpoints ?? Self.resolveEndpoints(
+            fromNpmrcContents: npmrcURL.flatMap {
+                try? String(contentsOf: $0, encoding: .utf8)
+            }
+        )
+        self.npmrcURL = npmrcURL
+        self.session = session
+    }
+
+    // The npmrc default registry goes first (the user's own mirror wins),
+    // then the known Skynet registries as fallbacks; duplicates collapse.
+    static func resolveEndpoints(
+        fromNpmrcContents contents: String?
+    ) -> [Endpoint] {
+        var endpoints = [
             Endpoint(
                 url: URL(string: "https://npm.shopee.io")!,
                 authHost: "npm.shopee.io"
@@ -269,31 +317,50 @@ public actor HTTPNpmRegistryClient: NpmRegistryLatestFetching {
                 )!,
                 authHost: "nexus.npt.seabank.io"
             ),
-        ],
-        npmrcURL: URL? = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".npmrc"),
-        session: URLSession = URLSession(configuration: {
-            let configuration = URLSessionConfiguration.ephemeral
-            configuration.timeoutIntervalForRequest = 10
-            return configuration
-        }())
-    ) {
-        self.endpoints = endpoints
-        self.npmrcURL = npmrcURL
-        self.session = session
+        ]
+        guard let contents else {
+            return endpoints
+        }
+        for line in contents.split(whereSeparator: \.isNewline) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("registry=") else {
+                continue
+            }
+            let raw = String(trimmed.dropFirst("registry=".count))
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+            let stripped = raw.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            guard let url = URL(string: stripped),
+                  url.scheme != nil,
+                  let host = url.host
+            else {
+                break
+            }
+            let custom = Endpoint(url: url, authHost: host)
+            // The user's own registry leads the probe order; a duplicate of
+            // a built-in moves to the front rather than staying in place.
+            if let existingIndex = endpoints.firstIndex(of: custom) {
+                endpoints.remove(at: existingIndex)
+            }
+            endpoints.insert(custom, at: 0)
+            break
+        }
+        return endpoints
     }
 
     public func latestVersion(of package: String) async -> String? {
-        guard let escaped = addingPercentEncoding(
-            forPackage: package
-        ) else {
-            return nil
-        }
         let tokens = loadRegistryTokens()
         for endpoint in endpoints {
-            var request = URLRequest(
-                url: endpoint.url.appendingPathComponent(escaped)
-            )
+            // Both appendingPathComponent and URLComponents.path would
+            // re-encode "%2F" into "%252F"; URL(string:) with a
+            // pre-escaped path leaves the sequence verbatim.
+            guard let escaped = addingPercentEncoding(forPackage: package),
+                  let url = URL(
+                      string: endpoint.url.absoluteString + "/" + escaped
+                  )
+            else {
+                continue
+            }
+            var request = URLRequest(url: url)
             if let token = tokens[endpoint.authHost] {
                 request.setValue(
                     "Bearer \(token)",
@@ -380,6 +447,7 @@ public protocol McpVersionChecking: Sendable {
 // upgrade itself is the CLI's `skynet update tools` / npm's job.
 public actor McpVersionChecker: McpVersionChecking {
     private let configURL: URL
+    private let cursorConfigURL: URL?
     private let registry: any NpmRegistryLatestFetching
     private let binarySearchPaths: [String]
     private let fileManager: FileManager
@@ -387,11 +455,14 @@ public actor McpVersionChecker: McpVersionChecking {
     public init(
         configURL: URL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".zcode/cli/config.json"),
+        cursorConfigURL: URL? = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".cursor/mcp.json"),
         registry: any NpmRegistryLatestFetching,
         binarySearchPaths: [String]? = nil,
         fileManager: FileManager = .default
     ) {
         self.configURL = configURL
+        self.cursorConfigURL = cursorConfigURL
         self.registry = registry
         self.fileManager = fileManager
         self.binarySearchPaths = binarySearchPaths ?? Self.defaultBinarySearchPaths()
@@ -419,27 +490,52 @@ public actor McpVersionChecker: McpVersionChecking {
     }
 
     public func checkVersions() async -> [McpVersionFinding] {
-        guard let data = try? Data(contentsOf: configURL),
-              let entries = McpConfigParser.parseServers(from: data)
-        else {
+        // Both IDE configs are read; identical server names stay separate
+        // findings because each config can pin a different version.
+        var sourcedEntries: [(entry: McpServerEntry, source: String)] = []
+        if let data = try? Data(contentsOf: configURL),
+           let entries = McpConfigParser.parseServers(from: data)
+        {
+            sourcedEntries.append(
+                contentsOf: entries.map { ($0, "ZCode") }
+            )
+        }
+        if let cursorConfigURL,
+           let data = try? Data(contentsOf: cursorConfigURL),
+           let entries = McpConfigParser.parseCursorServers(from: data)
+        {
+            sourcedEntries.append(
+                contentsOf: entries.map { ($0, "Cursor") }
+            )
+        }
+        guard !sourcedEntries.isEmpty else {
             return []
         }
 
         return await withTaskGroup(of: McpVersionFinding.self) { group in
-            for entry in entries {
+            for sourced in sourcedEntries {
                 group.addTask {
-                    await self.finding(for: entry)
+                    await self.finding(
+                        for: sourced.entry,
+                        source: sourced.source
+                    )
                 }
             }
             var findings: [McpVersionFinding] = []
             for await finding in group {
                 findings.append(finding)
             }
-            return findings.sorted { $0.serverName < $1.serverName }
+            return findings.sorted {
+                ($0.serverName, $0.configSource)
+                    < ($1.serverName, $1.configSource)
+            }
         }
     }
 
-    private func finding(for entry: McpServerEntry) async -> McpVersionFinding {
+    private func finding(
+        for entry: McpServerEntry,
+        source: String
+    ) async -> McpVersionFinding {
         guard let plan = McpServerPlan.plan(
             command: entry.command,
             arguments: entry.arguments
@@ -447,7 +543,7 @@ public actor McpVersionChecker: McpVersionChecking {
             return await resolvedFinding(
                 for: entry,
                 command: entry.command,
-                packageName: nil
+                source: source
             )
         }
 
@@ -458,7 +554,8 @@ public actor McpVersionChecker: McpVersionChecking {
             return McpVersionFinding(
                 serverName: entry.name,
                 packageName: package,
-                unpinned: true
+                unpinned: true,
+                configSource: source
             )
 
         case let .npxPinned(package, pinnedVersion):
@@ -467,14 +564,15 @@ public actor McpVersionChecker: McpVersionChecking {
                 packageName: package,
                 installedVersion: pinnedVersion,
                 latestVersion: await registry.latestVersion(of: package),
-                isNPXPinned: true
+                isNPXPinned: true,
+                configSource: source
             )
 
         case let .globalBinary(binaryName, binaryDirectory):
             return await resolvedFinding(
                 for: entry,
                 command: binaryDirectory + "/" + binaryName,
-                packageName: nil
+                source: source
             )
         }
     }
@@ -485,7 +583,7 @@ public actor McpVersionChecker: McpVersionChecking {
     private func resolvedFinding(
         for entry: McpServerEntry,
         command: String,
-        packageName: String?
+        source: String
     ) async -> McpVersionFinding {
         var directory = (command as NSString).deletingLastPathComponent
         let binaryName = (command as NSString).lastPathComponent
@@ -494,7 +592,10 @@ public actor McpVersionChecker: McpVersionChecking {
                 .map { ($0 as NSString).appendingPathComponent(binaryName) }
                 .first { fileManager.fileExists(atPath: $0) }
             guard let resolved = candidate else {
-                return McpVersionFinding(serverName: entry.name)
+                return McpVersionFinding(
+                    serverName: entry.name,
+                    configSource: source
+                )
             }
             directory = (resolved as NSString).deletingLastPathComponent
         }
@@ -503,13 +604,17 @@ public actor McpVersionChecker: McpVersionChecking {
             inBinaryDirectory: directory,
             fileManager: fileManager
         ) else {
-            return McpVersionFinding(serverName: entry.name)
+            return McpVersionFinding(
+                serverName: entry.name,
+                configSource: source
+            )
         }
         return McpVersionFinding(
             serverName: entry.name,
             packageName: package.name,
             installedVersion: package.version,
-            latestVersion: await registry.latestVersion(of: package.name)
+            latestVersion: await registry.latestVersion(of: package.name),
+            configSource: source
         )
     }
 }

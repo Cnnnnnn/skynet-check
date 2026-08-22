@@ -270,7 +270,11 @@ struct ComponentUpdateCardView: View {
             )
             .foregroundStyle(finding.isUpgradable ? .orange : .green)
             .accessibilityHidden(true)
-            Text(finding.serverName)
+            Text(
+                finding.configSource == "ZCode"
+                    ? finding.serverName
+                    : "\(finding.serverName)（\(finding.configSource)）"
+            )
                 .font(.caption)
                 .lineLimit(1)
             Spacer()

@@ -443,6 +443,7 @@ public final class MonitorStore: ObservableObject {
             )
         }
         componentUpdateCheckedAt = now()
+        await notifyComponentUpdatesIfNeeded()
         componentUpdateStore?.save(
             ComponentUpdateSnapshot(
                 savedAt: componentUpdateCheckedAt!,
@@ -452,6 +453,31 @@ public final class MonitorStore: ObservableObject {
             )
         )
         componentUpdateInProgress = false
+    }
+
+    // One notification per "fell behind" episode; a fully clean completed
+    // check re-arms it for the next drift.
+    private var notifiedComponentUpdatesEpisode = false
+
+    private func notifyComponentUpdatesIfNeeded() async {
+        guard skillUpdatePhase == .completed else {
+            return
+        }
+        let skillCount = skillUpdateReport?.updates.count ?? 0
+        let mcpCount = mcpVersionFindings.filter(\.isUpgradable).count
+        let hasUpdates = skillCount > 0 || mcpCount > 0
+        if hasUpdates {
+            guard !notifiedComponentUpdatesEpisode else {
+                return
+            }
+            notifiedComponentUpdatesEpisode = true
+            await notifier.notifyComponentUpdatesAvailable(
+                skillCount: skillCount,
+                mcpCount: mcpCount
+            )
+        } else {
+            notifiedComponentUpdatesEpisode = false
+        }
     }
 
     // Component versions drift on a daily cadence; piggyback on any
