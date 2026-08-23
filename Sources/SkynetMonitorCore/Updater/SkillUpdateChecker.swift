@@ -165,11 +165,13 @@ public actor HTTPSkynetPlatformClient: SkynetSkillVersionFetching {
     // `{"code":0,"data":{"total":N,"skills":[{"skill_name":…,
     // "main_version_number":…}]}}`; code 0 with entries missing the
     // version field simply contributes nothing to the map.
-    static func parseListPage(from data: Data) throws -> (
-        total: Int,
-        returned: Int,
-        versions: [String: String]
-    ) {
+    struct ListPageSummary {
+        let total: Int
+        let returned: Int
+        let versions: [String: String]
+    }
+
+    static func parseListPage(from data: Data) throws -> ListPageSummary {
         struct Entry: Decodable {
             let skillName: String?
             let mainVersionNumber: String?
@@ -204,10 +206,10 @@ public actor HTTPSkynetPlatformClient: SkynetSkillVersionFetching {
                 versions[name] = version
             }
         }
-        return (
-            response.data?.total ?? 0,
-            response.data?.skills?.count ?? 0,
-            versions
+        return ListPageSummary(
+            total: response.data?.total ?? 0,
+            returned: response.data?.skills?.count ?? 0,
+            versions: versions
         )
     }
 

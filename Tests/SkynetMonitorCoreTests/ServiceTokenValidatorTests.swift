@@ -72,9 +72,9 @@ final class ServiceTokenValidatorTests: XCTestCase {
             ServiceToken(key: "CONFLUENCE_TOKEN", displayName: "Confluence", value: "secret"),
         ])
         let store = MonitorStore(
-            checker: StubChecker(),
-            networkMonitor: StubNetworkMonitor(),
-            notifier: StubNotifier(),
+            checker: StoreFakeChecker(results: []),
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: true),
+            notifier: StoreFakeNotifier(),
             periodicInterval: nil,
             serviceTokenReader: reader,
             tokenValidator: StubTokenValidator(outcome: .invalid)
@@ -95,10 +95,10 @@ final class ServiceTokenValidatorTests: XCTestCase {
         ])
         let validator = MutableTokenValidator()
         validator.outcome = .invalid
-        let notifier = StubNotifier()
+        let notifier = StoreFakeNotifier()
         let store = MonitorStore(
-            checker: StubChecker(),
-            networkMonitor: StubNetworkMonitor(),
+            checker: StoreFakeChecker(results: []),
+            networkMonitor: StoreFakeNetworkMonitor(isAvailable: true),
             notifier: notifier,
             periodicInterval: nil,
             serviceTokenReader: reader,
@@ -164,52 +164,3 @@ private struct StubTokenReader: ServiceTokenReading {
             outcome
         }
     }
-
-private struct StubChecker: SkynetAuthChecking {
-    func check(networkAvailable: Bool) async -> LoginState {
-        .authenticated(email: nil)
-    }
-
-    func login(networkAvailable: Bool) async -> LoginActionResult {
-        .alreadyAuthenticated(email: nil)
-    }
-
-    func version() async -> String? {
-        nil
-    }
-}
-
-@MainActor
-private final class StubNetworkMonitor: NetworkMonitoring {
-    var isAvailable = true
-
-    func start(onChange: @escaping @MainActor @Sendable (Bool) -> Void) async {}
-
-    func stop() {}
-}
-
-@MainActor
-private final class StubNotifier: LoginNotifying {
-    private(set) var invalidTokenNotifications: [(key: String, name: String)] = []
-
-    func requestAuthorization() async {}
-
-    func authorizationStatus() async -> NotificationPermissionStatus {
-        .authorized
-    }
-
-    func notifyLoginExpired() async {}
-
-    func notifySessionExpiring(
-        stage: SessionExpiryAdvisor.Stage,
-        expiresAt: Date
-    ) async {}
-
-    func notifyServiceTokenInvalid(key: String, name: String) async {
-        invalidTokenNotifications.append((key, name))
-    }
-
-    func notifyCheckResult(_ state: LoginState) async {}
-
-    func notifyLoginResult(_ result: LoginActionResult) async {}
-}

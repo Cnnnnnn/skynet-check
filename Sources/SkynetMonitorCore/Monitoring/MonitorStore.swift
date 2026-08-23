@@ -3,66 +3,79 @@ import Foundation
 
 @MainActor
 public final class MonitorStore: ObservableObject {
-    @Published public private(set) var state: LoginState = .checking
+    // Setters for state/isChecking are internal: the login and refresh
+    // flows in the extension files publish through them.
+    @Published public internal(set) var state: LoginState = .checking
+    @Published public internal(set) var isChecking = false
     @Published public private(set) var lastCheckedAt: Date?
     @Published public private(set) var lastCompletedState: LoginState?
     @Published public private(set) var nextAutomaticCheckAt: Date?
     @Published public private(set) var cliVersion: String?
-    @Published public private(set) var isChecking = false
     @Published public private(set) var pollingIntervalMinutes: Int
-    @Published public private(set) var environmentReport: EnvironmentReport?
-    @Published public private(set) var notificationPermission: NotificationPermissionStatus = .unsupported
-    @Published public private(set) var permissionAudit: SkynetPermissionAudit
-    @Published public private(set) var permissionRepairMessage: String?
-    @Published public private(set) var updateStatus: AppUpdateStatus = .idle
-    @Published public private(set) var availableUpdate: AppUpdateManifest?
-    @Published public private(set) var sessionExpiresAt: Date?
-    @Published public private(set) var sessionExpiryOutlived = false
-    @Published public private(set) var sessionStatistics: SessionDurationStatistics?
-    @Published public private(set) var loginURL: URL?
+    @Published public internal(set) var environmentReport: EnvironmentReport?
+    @Published public internal(set) var notificationPermission: NotificationPermissionStatus = .unsupported
+    @Published public internal(set) var permissionAudit: SkynetPermissionAudit
+    @Published public internal(set) var permissionRepairMessage: String?
+    // Setter is internal so MonitorStore+AppUpdates.swift can publish
+    // results from its own file.
+    @Published public internal(set) var updateStatus: AppUpdateStatus = .idle
+    @Published public internal(set) var availableUpdate: AppUpdateManifest?
+    // Setters are internal (not private) so MonitorStore+SessionExpiry.swift
+    // can publish results from its own file.
+    @Published public internal(set) var sessionExpiresAt: Date?
+    @Published public internal(set) var sessionExpiryOutlived = false
+    @Published public internal(set) var sessionStatistics: SessionDurationStatistics?
+    @Published public internal(set) var loginURL: URL?
     @Published public private(set) var checkDurations = CheckDurationStats()
     @Published public private(set) var networkStability = NetworkStability()
-    @Published public private(set) var skynetConfig: SkynetConfigSummary?
-    @Published public private(set) var serviceTokens: [ServiceToken] = []
-    @Published public private(set) var tokenValidation: [String: ServiceTokenValidationOutcome] = [:]
-    @Published public private(set) var skillUpdatePhase: ComponentUpdatePhase = .idle
-    @Published public private(set) var skillUpdateReport: SkillUpdateReport?
-    @Published public private(set) var mcpVersionFindings: [McpVersionFinding] = []
-    @Published public private(set) var skillUpdateFailureDetail: String?
-    @Published public private(set) var componentUpdateCheckedAt: Date?
+    @Published public internal(set) var skynetConfig: SkynetConfigSummary?
+    @Published public internal(set) var serviceTokens: [ServiceToken] = []
+    @Published public internal(set) var tokenValidation: [String: ServiceTokenValidationOutcome] = [:]
+    // Setters are internal (not private) so MonitorStore+ComponentUpdates.swift
+    // can publish results from its own file.
+    @Published public internal(set) var skillUpdatePhase: ComponentUpdatePhase = .idle
+    @Published public internal(set) var skillUpdateReport: SkillUpdateReport?
+    @Published public internal(set) var mcpVersionFindings: [McpVersionFinding] = []
+    @Published public internal(set) var skillUpdateFailureDetail: String?
+    @Published public internal(set) var componentUpdateCheckedAt: Date?
 
-    private let checker: any SkynetAuthChecking
-    private let networkMonitor: any NetworkMonitoring
-    private let notifier: any LoginNotifying
+    // Access level note: these are `let var` internal (not private) because
+    // MonitorStore+ComponentUpdates.swift extends the class in another file.
+    let checker: any SkynetAuthChecking
+    let networkMonitor: any NetworkMonitoring
+    let notifier: any LoginNotifying
     private let periodicChecksEnabled: Bool
     private let pollingInterval: PollingInterval
-    private let environmentDoctor: EnvironmentDoctor?
-    private let permissionManager: SkynetPermissionManager
-    private let updateChecker: (any AppUpdateChecking)?
-    private let currentAppVersion: String?
+    let environmentDoctor: EnvironmentDoctor?
+    let permissionManager: SkynetPermissionManager
+    let updateChecker: (any AppUpdateChecking)?
+    let currentAppVersion: String?
     private let confirmationDelay: Duration
     private let wakeDelay: Duration
-    private let now: @Sendable () -> Date
+    let now: @Sendable () -> Date
 
     private var transitionTracker = LoginTransitionTracker()
     private let stateStore: (any LoginStateStoring)?
-    private let sessionExpiryStore: (any SessionExpiryStoring)?
-    private let serviceTokenReader: (any ServiceTokenReading)?
-    private let tokenValidator: (any ServiceTokenValidating)?
-    private let configReader: SkynetConfigReader?
-    private let skillUpdateChecker: (any SkillUpdateChecking)?
-    private let mcpVersionChecker: (any McpVersionChecking)?
-    private let componentUpdateStore: (any ComponentUpdateSnapshotStoring)?
-    private var expiryTracker: SessionExpiryTracker
-    private var expiryAdvisor = SessionExpiryAdvisor()
+    let sessionExpiryStore: (any SessionExpiryStoring)?
+    let serviceTokenReader: (any ServiceTokenReading)?
+    let tokenValidator: (any ServiceTokenValidating)?
+    let configReader: SkynetConfigReader?
+    let skillUpdateChecker: (any SkillUpdateChecking)?
+    let mcpVersionChecker: (any McpVersionChecking)?
+    let componentUpdateStore: (any ComponentUpdateSnapshotStoring)?
+    var expiryTracker: SessionExpiryTracker
+    var expiryAdvisor = SessionExpiryAdvisor()
     private var periodicTask: Task<Void, Never>?
     private var confirmationTask: Task<Void, Never>?
     private var wakeTask: Task<Void, Never>?
-    private var refreshPending = false
+    var refreshPending = false
     private var pendingResultNotification = false
-    private var componentUpdateInProgress = false
+    var componentUpdateInProgress = false
+    // One notification per "fell behind" episode; see
+    // MonitorStore+ComponentUpdates.swift.
+    var notifiedComponentUpdatesEpisode = false
     private var started = false
-    private var notifiedInvalidTokenKeys: Set<String> = []
+    var notifiedInvalidTokenKeys: Set<String> = []
 
     public init(
         checker: any SkynetAuthChecking,
@@ -203,41 +216,7 @@ public final class MonitorStore: ObservableObject {
         maybeRecheckComponentUpdates()
     }
 
-    public func login() async {
-        guard !isChecking else {
-            refreshPending = true
-            return
-        }
-
-        isChecking = true
-        state = .checking
-        let loginResult = await checker.login(
-            networkAvailable: networkMonitor.isAvailable,
-            onLoginURL: { [weak self] url in
-                // The URL is printed as soon as the login command starts;
-                // show the manual-fallback button right away instead of
-                // waiting for the whole (possibly stalled) flow.
-                Task { @MainActor [weak self] in
-                    self?.loginURL = url
-                }
-            }
-        )
-        let result = loginResult.state
-        await complete(with: result)
-        // Keep the login URL around when the flow did not finish; the
-        // panel offers it as a manual fallback if no browser opened.
-        loginURL = loginResult.loginURL
-        MonitorLog.store.info(
-            "login flow completed: \(result.presentation.title, privacy: .public)"
-        )
-        await handleTransition(result)
-        await notifier.notifyLoginResult(loginResult)
-        // A login unlocks the platform-backed skill check; re-run it right
-        // away instead of leaving the panel on the needs-login hint.
-        if result.isAuthenticated, skillUpdatePhase == .needsLogin {
-            await checkComponentUpdates()
-        }
-    }
+    // The interactive login flow lives in MonitorStore+Login.swift.
 
     public func handleWake() {
         MonitorLog.store.info("system woke; scheduling refresh")
@@ -292,77 +271,13 @@ public final class MonitorStore: ObservableObject {
         startPeriodicChecks()
     }
 
-    public func inspectEnvironment() async {
-        // Component-version checks hit the platform and npm registries and
-        // can take seconds; they run beside the environment probes instead
-        // of blocking them.
-        if skillUpdateChecker != nil || mcpVersionChecker != nil {
-            Task { await checkComponentUpdates() }
-        }
-        notificationPermission = await notifier.authorizationStatus()
-        if let serviceTokenReader {
-            // Values are published for the panel's copy action only; never
-            // logged and never part of the diagnostics report.
-            let tokens = serviceTokenReader.availableTokens()
-            serviceTokens = tokens
-            MonitorLog.store.info(
-                "loaded \(tokens.count, privacy: .public) service token(s)"
-            )
-            tokenValidation = await validateTokens(tokens)
-            await notifyInvalidTokensIfNeeded()
-        }
-        if let configReader {
-            skynetConfig = configReader.read()
-        }
-        guard let environmentDoctor else {
-            return
-        }
-        environmentReport = await environmentDoctor.inspect(
-            networkAvailable: networkMonitor.isAvailable
-        )
-        permissionAudit = permissionManager.audit()
-    }
+    // Environment inspection and permission repair live in
+    // MonitorStore+Environment.swift.
 
-    public func repairPermissions() {
-        do {
-            try permissionManager.repair()
-            permissionAudit = permissionManager.audit()
-            permissionRepairMessage = MonitorText.Permission.repaired
-        } catch {
-            permissionRepairMessage = MonitorText.Permission.repairFailed
-        }
-    }
+    // App self-update check and diagnostics report live in
+    // MonitorStore+AppUpdates.swift.
 
-    public func checkForUpdates() async {
-        guard let updateChecker else {
-            return
-        }
-        updateStatus = .checking
-        do {
-            let manifest = try await updateChecker.latestRelease()
-            let status = AppUpdateEvaluator.evaluate(
-                currentVersion: currentAppVersion ?? "",
-                manifest: manifest
-            )
-            updateStatus = status
-            if case .available = status {
-                availableUpdate = manifest
-            } else {
-                availableUpdate = nil
-            }
-            MonitorLog.store.info(
-                "update check finished: \(status.logLabel, privacy: .public)"
-            )
-        } catch {
-            updateStatus = .failed
-            availableUpdate = nil
-            MonitorLog.store.error(
-                "update check failed: \(error.localizedDescription, privacy: .public)"
-            )
-        }
-    }
-
-    private func complete(with result: LoginState) async {
+    func complete(with result: LoginState) async {
         let completedAt = now()
         state = result
         lastCompletedState = result
@@ -377,231 +292,13 @@ public final class MonitorStore: ObservableObject {
         await handleSessionExpiry(result, at: completedAt)
     }
 
-    private func handleSessionExpiry(_ result: LoginState, at date: Date) async {
-        expiryTracker.recordState(result, at: date)
-        sessionExpiryStore?.save(expiryTracker.currentRecord)
-        let estimatedExpiry = expiryTracker.estimatedExpiry(now: date)
-        sessionExpiresAt = estimatedExpiry
-        sessionExpiryOutlived = expiryTracker.hasOutlivedEstimate(now: date)
-        sessionStatistics = expiryTracker.currentRecord.statistics
+    // Session-expiry estimation, statistics and notifications live in
+    // MonitorStore+SessionExpiry.swift.
 
-        let sessionStartedAt = expiryTracker.currentRecord.lastAuthenticatedAt
-        if let stage = expiryAdvisor.evaluate(
-            estimatedExpiry: estimatedExpiry,
-            sessionStartedAt: sessionStartedAt,
-            now: date
-        ), let estimatedExpiry {
-            MonitorLog.store.notice(
-                "session expiry estimate crossed a threshold (\(stage.logLabel, privacy: .public))"
-            )
-            await notifier.notifySessionExpiring(
-                stage: stage,
-                expiresAt: estimatedExpiry
-            )
-        }
-    }
+    // Service-token validation and alerting live in
+    // MonitorStore+TokenValidation.swift.
 
-    // Compares locally installed skills/MCP packages against their remote
-    // latest versions. Detection only — upgrades stay with the CLI.
-    public func checkComponentUpdates() async {
-        guard skillUpdateChecker != nil || mcpVersionChecker != nil else {
-            return
-        }
-        guard !componentUpdateInProgress else {
-            return
-        }
-        componentUpdateInProgress = true
-        skillUpdatePhase = .checking
-
-        async let skillResult = skillUpdateChecker?.checkForUpdates()
-        async let mcpResult = mcpVersionChecker?.checkVersions()
-        let (skills, mcps) = await (skillResult, mcpResult)
-
-        if let skills {
-            switch skills {
-            case .needsLogin:
-                skillUpdatePhase = .needsLogin
-                skillUpdateReport = nil
-                skillUpdateFailureDetail = nil
-            case let .completed(report):
-                skillUpdatePhase = .completed
-                skillUpdateReport = report
-                skillUpdateFailureDetail = nil
-            case let .failed(reason):
-                skillUpdatePhase = .failed
-                skillUpdateReport = nil
-                skillUpdateFailureDetail = reason
-            }
-            MonitorLog.store.info(
-                "skill update check: \(skills.logLabel, privacy: .public)"
-            )
-        }
-        if let mcps {
-            mcpVersionFindings = mcps
-            MonitorLog.store.info(
-                "mcp version check: \(mcps.count, privacy: .public) server(s)"
-            )
-        }
-        componentUpdateCheckedAt = now()
-        await notifyComponentUpdatesIfNeeded()
-        componentUpdateStore?.save(
-            ComponentUpdateSnapshot(
-                savedAt: componentUpdateCheckedAt!,
-                skillPhase: skillUpdatePhase,
-                skillReport: skillUpdateReport,
-                mcpFindings: mcpVersionFindings
-            )
-        )
-        componentUpdateInProgress = false
-    }
-
-    // One notification per "fell behind" episode; a fully clean completed
-    // check re-arms it for the next drift.
-    private var notifiedComponentUpdatesEpisode = false
-
-    private func notifyComponentUpdatesIfNeeded() async {
-        guard skillUpdatePhase == .completed else {
-            return
-        }
-        let skillCount = skillUpdateReport?.updates.count ?? 0
-        let mcpCount = mcpVersionFindings.filter(\.isUpgradable).count
-        let hasUpdates = skillCount > 0 || mcpCount > 0
-        if hasUpdates {
-            guard !notifiedComponentUpdatesEpisode else {
-                return
-            }
-            notifiedComponentUpdatesEpisode = true
-            await notifier.notifyComponentUpdatesAvailable(
-                skillCount: skillCount,
-                mcpCount: mcpCount
-            )
-        } else {
-            notifiedComponentUpdatesEpisode = false
-        }
-    }
-
-    // Component versions drift on a daily cadence; piggyback on any
-    // completed refresh (periodic, manual, wake, network recovery) but at
-    // most once every two hours.
-    private static let componentRecheckInterval: TimeInterval = 2 * 60 * 60
-
-    private func maybeRecheckComponentUpdates() {
-        guard skillUpdateChecker != nil || mcpVersionChecker != nil else {
-            return
-        }
-        if let lastChecked = componentUpdateCheckedAt,
-           now().timeIntervalSince(lastChecked) < Self.componentRecheckInterval
-        {
-            return
-        }
-        Task { await checkComponentUpdates() }
-    }
-
-    // The component card appears once a check has produced anything to say;
-    // stores without checkers (tests) never show it.
-    public var showsComponentUpdates: Bool {
-        skillUpdateChecker != nil || mcpVersionChecker != nil
-    }
-
-    // No manifest URL configured means "检查更新" can only ever fail; the
-    // panel hides the row instead.
-    public var showsUpdateCheck: Bool {
-        updateChecker != nil
-    }
-
-    public func diagnosticsReport() -> String {
-        DiagnosticsComposer.compose(
-            appVersion: currentAppVersion,
-            state: state,
-            lastCheckedAt: lastCheckedAt,
-            lastCompletedState: lastCompletedState,
-            sessionExpiresAt: sessionExpiresAt,
-            sessionExpiryOutlived: sessionExpiryOutlived,
-            pollingIntervalMinutes: pollingIntervalMinutes,
-            notificationPermission: notificationPermission,
-            permissionAudit: permissionAudit,
-            environment: environmentReport,
-            tokenValidation: tokenValidation,
-            checkDurations: checkDurations,
-            skynetConfig: skynetConfig,
-            networkStability: networkStability,
-            skillUpdatePhase: skillUpdatePhase,
-            skillUpdateReport: skillUpdateReport,
-            mcpVersionFindings: mcpVersionFindings
-        )
-    }
-
-    public func resetSessionStatistics() {
-        // Keep the current login period; only forget the observed durations
-        // so a corrupted sample no longer skews the expiry estimate.
-        expiryTracker = SessionExpiryTracker(
-            record: SessionExpiryRecord(
-                lastAuthenticatedAt: expiryTracker.currentRecord.lastAuthenticatedAt
-            )
-        )
-        sessionExpiryStore?.save(expiryTracker.currentRecord)
-        sessionStatistics = nil
-        sessionExpiresAt = expiryTracker.estimatedExpiry(now: now())
-        sessionExpiryOutlived = expiryTracker.hasOutlivedEstimate(now: now())
-        MonitorLog.store.info("session duration statistics reset")
-    }
-
-    // One notification per token per failure episode; a token that turns
-    // valid again re-arms the alert.
-    private func notifyInvalidTokensIfNeeded() async {
-        let tokenByName = Dictionary(
-            serviceTokens.map { ($0.key, $0) },
-            uniquingKeysWith: { first, _ in first }
-        )
-
-        for (key, outcome) in tokenValidation.sorted(by: { $0.key < $1.key }) {
-            switch outcome {
-            case .invalid:
-                guard !notifiedInvalidTokenKeys.contains(key) else {
-                    continue
-                }
-                notifiedInvalidTokenKeys.insert(key)
-                await notifier.notifyServiceTokenInvalid(
-                    key: key,
-                    name: tokenByName[key]?.displayName ?? key
-                )
-            case .valid:
-                notifiedInvalidTokenKeys.remove(key)
-            case .unknown:
-                break
-            }
-        }
-    }
-
-    private func validateTokens(
-        _ tokens: [ServiceToken]
-    ) async -> [String: ServiceTokenValidationOutcome] {
-        guard let tokenValidator else {
-            return [:]
-        }
-
-        // Outcomes carry no token material — only the per-key verdict.
-        return await withTaskGroup(
-            of: (String, ServiceTokenValidationOutcome).self
-        ) { group in
-            for token in tokens where tokenValidator.supportedKeys.contains(token.key) {
-                group.addTask {
-                    let outcome = await tokenValidator.validate(token: token)
-                    MonitorLog.store.info(
-                        "token \(token.key, privacy: .public) validation: \(outcome.logLabel, privacy: .public)"
-                    )
-                    return (token.key, outcome)
-                }
-            }
-            var results: [String: ServiceTokenValidationOutcome] = [:]
-            for await (key, outcome) in group {
-                results[key] = outcome
-            }
-            return results
-        }
-    }
-
-    private func handleTransition(_ result: LoginState) async {
+    func handleTransition(_ result: LoginState) async {
         switch transitionTracker.consume(result) {
         case .none:
             if result != .unauthenticated {

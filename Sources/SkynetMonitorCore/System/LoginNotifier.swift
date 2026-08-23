@@ -342,9 +342,8 @@ public final class LoginNotifier: NSObject, LoginNotifying,
                 "posted \(label, privacy: .public) notification"
             )
         } catch {
-            MonitorLog.notifier.error(
-                "failed to post \(label, privacy: .public) notification: \(error.localizedDescription, privacy: .public)"
-            )
+            let message = "failed to post \(label) notification: \(error.localizedDescription)"
+            MonitorLog.notifier.error("\(message, privacy: .public)")
         }
     }
 

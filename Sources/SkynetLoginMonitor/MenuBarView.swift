@@ -7,10 +7,7 @@ struct MenuBarView: View {
     @ObservedObject private var store: MonitorStore
     private let launchAtLogin: any LaunchAtLoginControlling
 
-    @State private var launchAtLoginEnabled: Bool
-    @State private var launchAtLoginMessage: String?
     @State private var diagnosticsCopied = false
-    @State private var isSettingsExpanded = false
 
     init(
         store: MonitorStore,
@@ -18,7 +15,6 @@ struct MenuBarView: View {
     ) {
         self.store = store
         self.launchAtLogin = launchAtLogin
-        _launchAtLoginEnabled = State(initialValue: launchAtLogin.isEnabled)
     }
 
     var body: some View {
@@ -66,7 +62,8 @@ struct MenuBarView: View {
                 if let lastCheckedAt = store.lastCheckedAt,
                    let lastCompletedState = store.lastCompletedState {
                     Label(
-                        "最近：\(lastCompletedState.presentation.title) · \(lastCheckedAt.formatted(date: .omitted, time: .shortened))",
+                        "最近：\(lastCompletedState.presentation.title) · "
+                            + lastCheckedAt.formatted(date: .omitted, time: .shortened),
                         systemImage: "clock"
                     )
                 }
@@ -89,7 +86,8 @@ struct MenuBarView: View {
                 }
                 if let sessionStatistics = store.sessionStatistics {
                     Label(
-                        "平均会话 \(DurationPresentation.summarize(sessionStatistics.average))（近 \(sessionStatistics.observationCount) 次）",
+                        "平均会话 \(DurationPresentation.summarize(sessionStatistics.average))"
+                            + "（近 \(sessionStatistics.observationCount) 次）",
                         systemImage: "chart.bar"
                     )
                 }
@@ -179,71 +177,7 @@ struct MenuBarView: View {
 
             Divider()
 
-            DisclosureGroup(isExpanded: $isSettingsExpanded) {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Label("开机启动", systemImage: "power")
-                            .font(.subheadline)
-                        Spacer()
-                        Toggle(
-                            "",
-                            isOn: Binding(
-                                get: { launchAtLoginEnabled },
-                                set: { enabled in setLaunchAtLogin(enabled) }
-                            )
-                        )
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                        .accessibilityLabel(Text("开机启动"))
-                    }
-
-                    HStack(spacing: 10) {
-                        Label("自动检查", systemImage: "timer")
-                            .font(.subheadline)
-                        Slider(
-                            value: pollingIntervalBinding,
-                            in: 3.0...60.0,
-                            step: 1
-                        )
-                        .accessibilityLabel(Text("自动检查间隔"))
-                        .accessibilityValue(Text("\(store.pollingIntervalMinutes) 分钟"))
-                        Text("\(store.pollingIntervalMinutes) 分钟")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 52, alignment: .trailing)
-                    }
-
-                    if store.showsUpdateCheck {
-                        updateCheckRow
-                    }
-
-                    if launchAtLogin.requiresApproval {
-                        Text("需要在“系统设置 → 登录项”中允许")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    if let launchAtLoginMessage {
-                        Text(launchAtLoginMessage)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    HStack {
-                        Button("重置会话统计") {
-                            store.resetSessionStatistics()
-                        }
-                        .buttonStyle(.borderless)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        Spacer()
-                    }
-                }
-                .padding(.top, 6)
-            } label: {
-                Label("设置", systemImage: "gearshape")
-                    .font(.subheadline.weight(.semibold))
-            }
+            SettingsSectionView(store: store, launchAtLogin: launchAtLogin)
 
             HStack {
                 Text("Skynet Login Monitor \(appVersionText)")
@@ -278,44 +212,6 @@ struct MenuBarView: View {
         return version
     }
 
-    @ViewBuilder
-    private var updateCheckRow: some View {
-        HStack(spacing: 8) {
-            Button("检查更新") {
-                Task { await store.checkForUpdates() }
-            }
-            .controlSize(.small)
-            .disabled(store.updateStatus == .checking)
-
-            switch store.updateStatus {
-            case .idle:
-                EmptyView()
-            case .checking:
-                ProgressView()
-                    .controlSize(.mini)
-            case .upToDate:
-                Text(MonitorText.UpdateCheck.upToDate)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            case .available(let version):
-                Text("有新版本 \(version)")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                if let update = store.availableUpdate {
-                    Button("前往下载") {
-                        NSWorkspace.shared.open(update.downloadURL)
-                    }
-                    .controlSize(.small)
-                    .buttonStyle(.borderedProminent)
-                }
-            case .failed:
-                Text(MonitorText.UpdateCheck.failed)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
     private var pollingIntervalBinding: Binding<Double> {
         Binding(
             get: { Double(store.pollingIntervalMinutes) },
@@ -332,19 +228,6 @@ struct MenuBarView: View {
             forType: .string
         )
         diagnosticsCopied = true
-    }
-
-    private func setLaunchAtLogin(_ enabled: Bool) {
-        do {
-            try launchAtLogin.setEnabled(enabled)
-            launchAtLoginEnabled = launchAtLogin.isEnabled
-            launchAtLoginMessage = launchAtLogin.requiresApproval
-                ? "请在系统设置中批准后再检查"
-                : nil
-        } catch {
-            launchAtLoginEnabled = launchAtLogin.isEnabled
-            launchAtLoginMessage = "无法更新开机启动设置"
-        }
     }
 }
 

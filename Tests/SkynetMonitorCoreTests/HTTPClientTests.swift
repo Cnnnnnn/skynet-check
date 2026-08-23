@@ -189,6 +189,7 @@ final class HTTPClientTests: XCTestCase {
     private func writeTemporaryFile(json: String) -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString + ".json")
+        // swiftlint:disable:next force_try
         try! json.write(to: url, atomically: true, encoding: .utf8)
         temporaryURLs.append(url)
         return url
@@ -225,10 +226,15 @@ private final class StubURLProtocol: URLProtocol {
         }
     }
 
+    // URLProtocol requires class methods for overriding; `static` cannot
+    // participate in overrides, so the lint suggestion does not apply here.
+
+    // swiftlint:disable:next static_over_final_class
     override class func canInit(with request: URLRequest) -> Bool {
         true
     }
 
+    // swiftlint:disable:next static_over_final_class
     override class func canonicalRequest(for request: URLRequest) -> URLRequest {
         request
     }

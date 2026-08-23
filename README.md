@@ -25,6 +25,13 @@ open "build/Skynet Login Monitor.app"
 
 The packaged app is ad-hoc signed for local use. It has no Dock icon.
 
+Commits run swiftlint + swift test via a local pre-commit hook. Enable it
+after cloning (git config is not versioned):
+
+```bash
+git config core.hooksPath scripts/githooks
+```
+
 For team distribution, run scripts/package-team-release.sh after importing a
 Developer ID Application certificate and creating a notarytool keychain
 profile. The script requires SKYNET_SIGNING_IDENTITY and

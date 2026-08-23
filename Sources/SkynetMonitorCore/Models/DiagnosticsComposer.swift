@@ -28,6 +28,58 @@ public enum DiagnosticsComposer {
         var lines: [String] = []
         lines.append("Skynet Login Monitor 诊断信息")
         lines.append("生成时间：\(format(now))")
+        appendStatusLines(
+            to: &lines,
+            appVersion: appVersion,
+            state: state,
+            lastCheckedAt: lastCheckedAt,
+            lastCompletedState: lastCompletedState,
+            sessionExpiresAt: sessionExpiresAt,
+            sessionExpiryOutlived: sessionExpiryOutlived,
+            now: now
+        )
+        lines.append("自动检查间隔：\(pollingIntervalMinutes) 分钟")
+        lines.append("通知权限：\(notificationPermission.diagnosticDetail)")
+        appendEnvironmentLines(
+            to: &lines,
+            permissionAudit: permissionAudit,
+            environment: environment,
+            skynetConfig: skynetConfig
+        )
+        if let last = checkDurations.last {
+            let average = checkDurations.average.map {
+                " · 平均 \(DurationPresentation.summarizeSeconds($0))"
+            } ?? ""
+            lines.append(
+                "检查耗时：最近 \(DurationPresentation.summarizeSeconds(last))\(average)"
+            )
+        }
+        lines.append(
+            contentsOf: componentVersionLines(
+                phase: skillUpdatePhase,
+                report: skillUpdateReport,
+                findings: mcpVersionFindings
+            )
+        )
+        appendNetworkAndTokenLines(
+            to: &lines,
+            networkStability: networkStability,
+            tokenValidation: tokenValidation,
+            now: now
+        )
+        return lines.joined(separator: "\n")
+    }
+
+    private static func appendStatusLines(
+        to lines: inout [String],
+        appVersion: String?,
+        state: LoginState?,
+        lastCheckedAt: Date?,
+        lastCompletedState: LoginState?,
+        sessionExpiresAt: Date?,
+        sessionExpiryOutlived: Bool,
+        now: Date
+    ) {
         if let appVersion, !appVersion.isEmpty {
             lines.append("应用版本：\(appVersion)")
         }
@@ -49,11 +101,19 @@ public enum DiagnosticsComposer {
         } else if sessionExpiryOutlived {
             lines.append(MonitorText.SessionExpiry.diagnosticsOutlived)
         }
-        lines.append("自动检查间隔：\(pollingIntervalMinutes) 分钟")
-        lines.append("通知权限：\(notificationPermission.diagnosticDetail)")
+    }
+
+    private static func appendEnvironmentLines(
+        to lines: inout [String],
+        permissionAudit: SkynetPermissionAudit?,
+        environment: EnvironmentReport?,
+        skynetConfig: SkynetConfigSummary?
+    ) {
         if let permissionAudit, permissionAudit.hasDirectory {
             lines.append(
-                "配置权限：目录 \(modeText(permissionAudit.directoryMode)) / session \(modeText(permissionAudit.sessionMode)) / config \(modeText(permissionAudit.configMode))"
+                "配置权限：目录 \(modeText(permissionAudit.directoryMode))"
+                    + " / session \(modeText(permissionAudit.sessionMode))"
+                    + " / config \(modeText(permissionAudit.configMode))"
             )
         }
         if let environment {
@@ -62,36 +122,28 @@ public enum DiagnosticsComposer {
                 lines.append("- \(check.name)：\(check.detail)")
             }
         }
-        if let skynetConfig {
-            var fields: [String] = []
-            if let mode = skynetConfig.mode {
-                fields.append("mode=\(mode)")
-            }
-            if let role = skynetConfig.role {
-                fields.append("role=\(role)")
-            }
-            if let language = skynetConfig.language {
-                fields.append("language=\(language)")
-            }
-            if !fields.isEmpty {
-                lines.append("Skynet 配置：\(fields.joined(separator: " "))")
-            }
+        guard let skynetConfig else { return }
+        var fields: [String] = []
+        if let mode = skynetConfig.mode {
+            fields.append("mode=\(mode)")
         }
-        if let last = checkDurations.last {
-            let average = checkDurations.average.map {
-                " · 平均 \(DurationPresentation.summarizeSeconds($0))"
-            } ?? ""
-            lines.append(
-                "检查耗时：最近 \(DurationPresentation.summarizeSeconds(last))\(average)"
-            )
+        if let role = skynetConfig.role {
+            fields.append("role=\(role)")
         }
-        lines.append(
-            contentsOf: componentVersionLines(
-                phase: skillUpdatePhase,
-                report: skillUpdateReport,
-                findings: mcpVersionFindings
-            )
-        )
+        if let language = skynetConfig.language {
+            fields.append("language=\(language)")
+        }
+        if !fields.isEmpty {
+            lines.append("Skynet 配置：\(fields.joined(separator: " "))")
+        }
+    }
+
+    private static func appendNetworkAndTokenLines(
+        to lines: inout [String],
+        networkStability: NetworkStability,
+        tokenValidation: [String: ServiceTokenValidationOutcome],
+        now: Date
+    ) {
         let dayAgo = now.addingTimeInterval(-24 * 3600)
         let recentOutages = networkStability.outages(since: dayAgo)
         if !recentOutages.isEmpty {
@@ -103,7 +155,6 @@ public enum DiagnosticsComposer {
         for (key, outcome) in tokenValidation.sorted(by: { $0.key < $1.key }) {
             lines.append("- Token \(key)：\(outcome.panelDetail)")
         }
-        return lines.joined(separator: "\n")
     }
 
     private static func format(_ date: Date) -> String {

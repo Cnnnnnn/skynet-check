@@ -207,59 +207,14 @@ struct ComponentUpdateCardView: View {
         }
     }
 
-    // npx-pinned servers keep their version inside the ZCode config; the
-    // CLI's update tools cannot edit that file, so the actionable help is
-    // the new number and where to paste it.
+    // npx-pinned servers keep their version inside the ZCode config; see
+    // McpPinUpgradeHint for why the help is copy/reveal rather than an
+    // in-app upgrade.
     @ViewBuilder
     private var pinUpgradeRow: some View {
         if let pinned = mcpFindings.first(where: { $0.isNPXPinned && $0.isUpgradable }) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Image(systemName: "square.and.pencil")
-                        .foregroundStyle(.orange)
-                        .accessibilityHidden(true)
-                    Text(MonitorText.ComponentUpdate.pinUpgradeTitle(pinned.serverName))
-                        .font(.caption)
-                }
-                Text(
-                    MonitorText.ComponentUpdate.pinUpgradeDetail(
-                        package: pinned.packageName ?? "",
-                        from: pinned.installedVersion ?? "",
-                        to: pinned.latestVersion ?? ""
-                    )
-                )
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                HStack(spacing: 8) {
-                    Button(
-                        MonitorText.ComponentUpdate.copyNewVersion(
-                            pinned.latestVersion ?? ""
-                        )
-                    ) {
-                        copyToPasteboard(pinned.latestVersion ?? "")
-                    }
-                    .controlSize(.small)
-                    Button(MonitorText.ComponentUpdate.revealConfig) {
-                        revealConfigFile()
-                    }
-                    .buttonStyle(.borderless)
-                    .font(.caption)
-                }
-            }
+            McpPinUpgradeHint(finding: pinned)
         }
-    }
-
-    private func copyToPasteboard(_ text: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
-    }
-
-    private func revealConfigFile() {
-        let configURL = URL(
-            fileURLWithPath: ("~/.zcode/cli/config.json" as NSString)
-                .expandingTildeInPath
-        )
-        NSWorkspace.shared.activateFileViewerSelecting([configURL])
     }
 
     private func mcpRow(_ finding: McpVersionFinding) -> some View {
@@ -346,5 +301,5 @@ extension SkillUpdate: Identifiable {
 }
 
 extension McpVersionFinding: Identifiable {
-    public var id: String { serverName }
+    public var id: String { "\(configSource)-\(serverName)" }
 }

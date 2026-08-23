@@ -154,10 +154,10 @@ private final class ProcessExecution: @unchecked Sendable {
 
         // Log metadata only: command output may contain account details.
         let commandName = process.executableURL?.lastPathComponent ?? "process"
-        let exitCode = process.terminationStatus
-        MonitorLog.runner.info(
-            "command \(commandName, privacy: .public) exit=\(exitCode) timedOut=\(timedOut) stdoutBytes=\(outputData.count) stderrBytes=\(errorData.count)"
-        )
+        let summary = "command \(commandName) exit=\(process.terminationStatus) "
+            + "timedOut=\(timedOut) stdoutBytes=\(outputData.count) "
+            + "stderrBytes=\(errorData.count)"
+        MonitorLog.runner.info("\(summary, privacy: .public)")
 
         return CommandResult(
             stdout: String(decoding: outputData, as: UTF8.self),

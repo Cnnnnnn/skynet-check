@@ -15,11 +15,29 @@ function_body_length:
 type_body_length:
   warning: 300
 
+file_length:
+  warning: 400
+  # 存量超大文件（MonitorStore/McpVersionChecker 等）是已记录的拆分债务，
+  # 只告警不阻断提交。
+  error: 2000
+
+force_try:
+  # 测试辅助函数写临时文件用 try! 是可接受的测试惯例。
+  severity: warning
+
 disabled_rules:
   - todo
   - identifier_name
   - multiple_closures_with_trailing_closure
   - nesting
+  # 本仓库多行集合统一带尾逗号（diff 友好），与该规则相反。
+  - trailing_comma
+  # 多行条件的大括号独占一行是本仓库既定风格。
+  - opening_brace
+  # 进程输出可能不是合法 UTF-8，String(decoding:) 的 lossy 行为是有意的。
+  - optional_data_string_conversion
+  # DiagnosticsComposer.compose 的诊断参数列表天然很长，调用点全部具名传参。
+  - function_parameter_count
 
 opt_in_rules:
   - empty_count
