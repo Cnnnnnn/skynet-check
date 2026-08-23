@@ -1,0 +1,40 @@
+import XCTest
+@testable import SkynetMonitorCore
+
+final class NotificationMuteWindowTests: XCTestCase {
+    private let now = Date(timeIntervalSince1970: 1_700_000_000)
+
+    func testNilWindowIsNeverActive() {
+        XCTAssertFalse(NotificationMuteWindow.isActive(nil, now: now))
+    }
+
+    func testFutureDeadlineIsActivePastDeadlineIsNot() {
+        let active = NotificationMuteWindow(pausedUntil: now.addingTimeInterval(60))
+        XCTAssertTrue(NotificationMuteWindow.isActive(active, now: now))
+        XCTAssertFalse(
+            NotificationMuteWindow.isActive(active, now: now.addingTimeInterval(61)),
+            "window expires once the deadline passes"
+        )
+    }
+
+    func testStoreRoundTripsAndResumeClears() {
+        let suite = "mute-window-tests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = NotificationMuteStore(defaults: defaults)
+
+        XCTAssertNil(store.load(), "no window persisted initially")
+
+        // A future deadline survives a save/load round trip.
+        let deadline = Date().addingTimeInterval(1800)
+        store.pause(until: deadline)
+        XCTAssertEqual(store.load()?.pausedUntil, deadline)
+
+        // An expired persisted window reads as inactive.
+        store.pause(until: Date().addingTimeInterval(-60))
+        XCTAssertNil(store.load())
+
+        store.resume()
+        XCTAssertNil(store.load())
+    }
+}

@@ -7,12 +7,18 @@ import SwiftUI
 struct SkynetLoginMonitorApp: App {
     @StateObject private var store: MonitorStore
     private let launchAtLogin = LaunchAtLoginController()
+    private let muteStore = NotificationMuteStore()
 
     init() {
         let runner = ProcessCommandRunner()
         let locator = CLIPathLocator(runner: runner)
         let checker = SkynetAuthChecker(locator: locator, runner: runner)
-        let notifier = LoginNotifier()
+        let muteStore = NotificationMuteStore()
+        let notifier = LoginNotifier(
+            // The notifier reads the same persisted window the settings
+            // row writes; while active every notification is dropped.
+            muteProvider: { muteStore.load() }
+        )
         let monitorStore = MonitorStore(
             checker: checker,
             networkMonitor: NetworkMonitor(),
@@ -60,7 +66,8 @@ struct SkynetLoginMonitorApp: App {
         MenuBarExtra {
             MenuBarView(
                 store: store,
-                launchAtLogin: launchAtLogin
+                launchAtLogin: launchAtLogin,
+                muteStore: muteStore
             )
         } label: {
             Image(nsImage: MenuBarIcon.image(for: store.state))

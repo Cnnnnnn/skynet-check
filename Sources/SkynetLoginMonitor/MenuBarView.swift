@@ -6,15 +6,18 @@ import SwiftUI
 struct MenuBarView: View {
     @ObservedObject private var store: MonitorStore
     private let launchAtLogin: any LaunchAtLoginControlling
+    private let muteStore: NotificationMuteStore
 
     @State private var diagnosticsCopied = false
 
     init(
         store: MonitorStore,
-        launchAtLogin: any LaunchAtLoginControlling
+        launchAtLogin: any LaunchAtLoginControlling,
+        muteStore: NotificationMuteStore
     ) {
         self.store = store
         self.launchAtLogin = launchAtLogin
+        self.muteStore = muteStore
     }
 
     var body: some View {
@@ -177,7 +180,11 @@ struct MenuBarView: View {
 
             Divider()
 
-            SettingsSectionView(store: store, launchAtLogin: launchAtLogin)
+            SettingsSectionView(
+                store: store,
+                launchAtLogin: launchAtLogin,
+                muteStore: muteStore
+            )
 
             HStack {
                 Text("Skynet Login Monitor \(appVersionText)")

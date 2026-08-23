@@ -1,95 +1,6 @@
 import Foundation
 import UserNotifications
 
-enum NotificationEnvironment {
-    static func supportsUserNotifications(
-        bundleURL: URL,
-        bundleIdentifier: String?
-    ) -> Bool {
-        bundleURL.pathExtension.lowercased() == "app"
-            && bundleIdentifier?.isEmpty == false
-    }
-}
-
-enum NotificationPresentationPolicy {
-    static let foregroundOptions: UNNotificationPresentationOptions = [
-        .banner,
-        .sound,
-    ]
-}
-
-public enum NotificationPermissionStatus: Equatable, Sendable {
-    case authorized
-    case notDetermined
-    case denied
-    case unsupported
-
-    var logLabel: String {
-        switch self {
-        case .authorized:
-            "authorized"
-        case .notDetermined:
-            "notDetermined"
-        case .denied:
-            "denied"
-        case .unsupported:
-            "unsupported"
-        }
-    }
-}
-
-public extension NotificationPermissionStatus {
-    // Hidden when the runtime cannot show notifications at all (e.g. a bare
-    // executable run outside an app bundle).
-    var shouldShowInPanel: Bool {
-        self != .unsupported
-    }
-
-    var needsSettingsShortcut: Bool {
-        self == .denied
-    }
-}
-
-enum NotificationPermissionMapper {
-    static func status(
-        from authorizationStatus: UNAuthorizationStatus
-    ) -> NotificationPermissionStatus {
-        switch authorizationStatus {
-        case .authorized, .provisional, .ephemeral:
-            return .authorized
-        case .denied:
-            return .denied
-        case .notDetermined:
-            return .notDetermined
-        @unknown default:
-            return .notDetermined
-        }
-    }
-}
-
-// Pure routing rules, kept outside the @MainActor class so the
-// nonisolated notification delegate can use them directly.
-enum NotificationActionRouting {
-    static let actionCategory = "skynet-login-actions"
-    static let manualCheckIdentifier = "skynet-manual-check"
-
-    // Action-category notifications (login expired / expiring, manual
-    // unauthenticated checks) default to re-login; other manual results
-    // default to a fresh check. Token notifications have no safe action.
-    static func defaultAction(
-        categoryIdentifier: String,
-        identifier: String
-    ) -> LoginNotificationAction? {
-        if categoryIdentifier == actionCategory {
-            return .login
-        }
-        if identifier == manualCheckIdentifier {
-            return .check
-        }
-        return nil
-    }
-}
-
 @MainActor
 public protocol LoginNotifying: AnyObject {
     func requestAuthorization() async
@@ -121,16 +32,24 @@ public final class LoginNotifier: NSObject, LoginNotifying,
     private static let componentUpdatesIdentifier = "skynet-component-updates"
     private let bundle: Bundle
     private let centerProvider: @MainActor () -> UNUserNotificationCenter
+    // When set (and in the future), notifications are dropped instead of
+    // posted; checks and panel updates continue as normal.
+    public var muteProvider: @MainActor () -> NotificationMuteWindow?
+    public var now: @MainActor () -> Date
     public var onAction: (@MainActor (LoginNotificationAction) -> Void)?
 
     public init(
         bundle: Bundle = .main,
         centerProvider: @escaping @MainActor () -> UNUserNotificationCenter = {
             .current()
-        }
+        },
+        muteProvider: @escaping @MainActor () -> NotificationMuteWindow? = { nil },
+        now: @escaping @MainActor () -> Date = Date.init
     ) {
         self.bundle = bundle
         self.centerProvider = centerProvider
+        self.muteProvider = muteProvider
+        self.now = now
         super.init()
     }
 
@@ -335,6 +254,12 @@ public final class LoginNotifier: NSObject, LoginNotifying,
         _ request: UNNotificationRequest,
         label: String
     ) async {
+        if NotificationMuteWindow.isActive(muteProvider(), now: now()) {
+            MonitorLog.notifier.info(
+                "muted \(label, privacy: .public) notification (do-not-disturb)"
+            )
+            return
+        }
         let center = centerProvider()
         do {
             try await center.add(request)

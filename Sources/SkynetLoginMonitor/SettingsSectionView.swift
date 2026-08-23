@@ -8,14 +8,22 @@ import SwiftUI
 struct SettingsSectionView: View {
     @ObservedObject var store: MonitorStore
     let launchAtLogin: any LaunchAtLoginControlling
+    let muteStore: NotificationMuteStore
 
     @State private var launchAtLoginEnabled: Bool
     @State private var launchAtLoginMessage: String?
     @State private var isExpanded = false
+    // Bumping this re-reads the mute store so the row reflects pause/resume.
+    @State private var refreshTick = 0
 
-    init(store: MonitorStore, launchAtLogin: any LaunchAtLoginControlling) {
+    init(
+        store: MonitorStore,
+        launchAtLogin: any LaunchAtLoginControlling,
+        muteStore: NotificationMuteStore = NotificationMuteStore()
+    ) {
         self.store = store
         self.launchAtLogin = launchAtLogin
+        self.muteStore = muteStore
         _launchAtLoginEnabled = State(initialValue: launchAtLogin.isEnabled)
     }
 
@@ -24,6 +32,7 @@ struct SettingsSectionView: View {
             VStack(alignment: .leading, spacing: 10) {
                 launchAtLoginRow
                 pollingIntervalRow
+                muteRow
                 if store.showsUpdateCheck {
                     updateCheckRow
                 }
@@ -35,6 +44,52 @@ struct SettingsSectionView: View {
             Label("设置", systemImage: "gearshape")
                 .font(.subheadline.weight(.semibold))
         }
+    }
+
+    // Do-not-disturb: while paused, notifications are dropped (checks and
+    // the panel keep updating). Presets cover a meeting through an afternoon.
+    private var muteRow: some View {
+        HStack(spacing: 8) {
+            if let pausedUntil = muteStore.load()?.pausedUntil {
+                Label(
+                    "通知已暂停至 \(pausedUntil.formatted(date: .omitted, time: .shortened))",
+                    systemImage: "bell.slash"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                Spacer()
+                Button("恢复") {
+                    muteStore.resume()
+                    refreshTick += 1
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
+            } else {
+                Menu {
+                    ForEach(NotificationMuteWindow.presets, id: \.self) { minutes in
+                        Button(Self.muteLabel(minutes)) {
+                            muteStore.pause(until: Date().addingTimeInterval(minutes * 60))
+                            refreshTick += 1
+                        }
+                    }
+                } label: {
+                    Label("暂停通知", systemImage: "bell")
+                        .font(.subheadline)
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private static func muteLabel(_ seconds: TimeInterval) -> String {
+        let minutes = Int(seconds / 60)
+        if minutes < 60 {
+            return "暂停 \(minutes) 分钟"
+        }
+        return "暂停 \(minutes / 60) 小时"
     }
 
     private var launchAtLoginRow: some View {
