@@ -8,11 +8,16 @@ let package = Package(
     products: [
         .library(name: "SkynetMonitorCore", targets: ["SkynetMonitorCore"]),
         .executable(name: "SkynetLoginMonitor", targets: ["SkynetLoginMonitor"]),
+        .executable(name: "skynet-status", targets: ["SkynetStatusCLI"]),
     ],
     targets: [
         .target(name: "SkynetMonitorCore"),
         .executableTarget(
             name: "SkynetLoginMonitor",
+            dependencies: ["SkynetMonitorCore"]
+        ),
+        .executableTarget(
+            name: "SkynetStatusCLI",
             dependencies: ["SkynetMonitorCore"]
         ),
         .testTarget(

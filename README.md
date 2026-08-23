@@ -25,6 +25,19 @@ open "build/Skynet Login Monitor.app"
 
 The packaged app is ad-hoc signed for local use. It has no Dock icon.
 
+## Status query for scripts
+
+`skynet-status` prints the last persisted check result as JSON — no CLI
+probes, no notifications. Exit code 0 with a report, 1 when no status
+exists yet:
+
+```bash
+swift build
+.build/debug/skynet-status --status --json
+# {"authenticated": true, "state": "authenticated", "email": "…",
+#  "checkedAt": …, "sessionExpiresAt": …}
+```
+
 Commits run swiftlint + swift test via a local pre-commit hook. Enable it
 after cloning (git config is not versioned):
 
