@@ -42,4 +42,28 @@ final class NotificationMuteWindowTests: XCTestCase {
         store.resume()
         XCTAssertNil(store.load())
     }
+
+    func testSuppressionCountingLifecycle() {
+        let suite = "mute-suppression-tests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = NotificationMuteStore(defaults: defaults)
+
+        // While muted, takeSummary reports nothing and keeps counting.
+        store.pause(until: Date().addingTimeInterval(1800))
+        store.recordSuppressed()
+        store.recordSuppressed()
+        XCTAssertNil(store.takeSuppressionSummary(now: Date()))
+
+        // After the window expires, the summary surfaces once then resets.
+        store.pause(until: Date().addingTimeInterval(-60))
+        XCTAssertEqual(store.takeSuppressionSummary(now: Date()), 2)
+        XCTAssertNil(store.takeSuppressionSummary(now: Date()))
+
+        // An explicit resume clears silently (no stale count).
+        store.pause(until: Date().addingTimeInterval(1800))
+        store.recordSuppressed()
+        store.resume()
+        XCTAssertNil(store.takeSuppressionSummary(now: Date()))
+    }
 }

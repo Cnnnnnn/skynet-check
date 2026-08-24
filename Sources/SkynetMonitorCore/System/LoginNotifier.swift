@@ -33,8 +33,11 @@ public final class LoginNotifier: NSObject, LoginNotifying,
     private let bundle: Bundle
     private let centerProvider: @MainActor () -> UNUserNotificationCenter
     // When set (and in the future), notifications are dropped instead of
-    // posted; checks and panel updates continue as normal.
+    // posted; checks and panel updates continue as normal. The store also
+    // counts suppressions so the first post-mute notification can carry a
+    // "已抑制 N 条" summary.
     public var muteProvider: @MainActor () -> NotificationMuteWindow?
+    public weak var muteStore: NotificationMuteStore?
     public var now: @MainActor () -> Date
     public var onAction: (@MainActor (LoginNotificationAction) -> Void)?
 
@@ -44,11 +47,13 @@ public final class LoginNotifier: NSObject, LoginNotifying,
             .current()
         },
         muteProvider: @escaping @MainActor () -> NotificationMuteWindow? = { nil },
+        muteStore: NotificationMuteStore? = nil,
         now: @escaping @MainActor () -> Date = Date.init
     ) {
         self.bundle = bundle
         self.centerProvider = centerProvider
         self.muteProvider = muteProvider
+        self.muteStore = muteStore
         self.now = now
         super.init()
     }
@@ -255,11 +260,38 @@ public final class LoginNotifier: NSObject, LoginNotifying,
         label: String
     ) async {
         if NotificationMuteWindow.isActive(muteProvider(), now: now()) {
+            muteStore?.recordSuppressed()
             MonitorLog.notifier.info(
                 "muted \(label, privacy: .public) notification (do-not-disturb)"
             )
             return
         }
+        // The first notification after a mute episode ends carries how many
+        // were suppressed, so nothing silently vanished.
+        if let muteStore, let count = muteStore.takeSuppressionSummary(now: now()) {
+            let annotated = UNMutableNotificationContent()
+            annotated.title = request.content.title
+            annotated.body = "（勿扰期间已抑制 \(count) 条通知）\n" + request.content.body
+            annotated.sound = request.content.sound
+            annotated.userInfo = request.content.userInfo
+            annotated.categoryIdentifier = request.content.categoryIdentifier
+            await deliver(
+                UNNotificationRequest(
+                    identifier: request.identifier,
+                    content: annotated,
+                    trigger: nil
+                ),
+                label: label
+            )
+            return
+        }
+        await deliver(request, label: label)
+    }
+
+    private func deliver(
+        _ request: UNNotificationRequest,
+        label: String
+    ) async {
         let center = centerProvider()
         do {
             try await center.add(request)

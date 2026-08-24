@@ -7,6 +7,9 @@ follow the newest `v*` git tag; the build number is the commit count.
 
 ### Added
 
+- The first notification after a do-not-disturb window expires now
+  carries a "已抑制 N 条通知" summary, so nothing silently vanished
+  during the pause. An explicit resume clears silently.
 - Shortcuts integration via App Intents: "查询登录状态" (reads the
   persisted snapshot, instant), "立即检查登录" (one real CLI probe) and
   "切换通知勿扰" (cycles the mute window off → 30min → 1h → 4h → off)
@@ -41,6 +44,14 @@ follow the newest `v*` git tag; the build number is the commit count.
   edit the ZCode config pin.
 - Skill update failures now show a reason; a check that resolved zero
   skills is reported as failed instead of "all current".
+
+### Fixed
+
+- SemanticVersion now parses pre-release ("1.2.0-beta") and build
+  metadata ("+build.7") suffixes: a pre-release no longer compares as
+  newer than its own release, which previously masked upgrade prompts.
+- MCP configs that exist but cannot be read or parsed are logged with
+  their path instead of silently counting as "no servers configured".
 
 ### Added
 

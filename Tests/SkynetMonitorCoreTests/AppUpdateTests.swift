@@ -11,6 +11,30 @@ final class AppUpdateTests: XCTestCase {
         XCTAssertNil(SemanticVersion("no-digits"))
     }
 
+    func testPrereleaseSortsBeforeRelease() {
+        // A pre-release of the same core must not look "newer" than the
+        // release itself.
+        XCTAssertTrue(SemanticVersion("1.2.0")! > SemanticVersion("1.2.0-beta")!)
+        XCTAssertFalse(SemanticVersion("1.2.0-beta")! > SemanticVersion("1.2.0")!)
+        // But a prerelease is still newer than the previous release.
+        XCTAssertTrue(SemanticVersion("1.2.0-beta")! > SemanticVersion("1.1.9")!)
+    }
+
+    func testBuildMetadataIsIgnored() {
+        XCTAssertEqual(
+            SemanticVersion("2.0.0+build.42")!.numbers,
+            [2, 0, 0]
+        )
+        XCTAssertFalse(
+            SemanticVersion("2.0.0+build.42")! > SemanticVersion("2.0.0")!
+        )
+    }
+
+    func testShortFormEqualsPaddedZeros() {
+        XCTAssertFalse(SemanticVersion("1.0")! > SemanticVersion("1.0.0")!)
+        XCTAssertTrue(SemanticVersion("1.0")! > SemanticVersion("0.9.9")!)
+    }
+
     func testEvaluatorReportsAvailableForNewerManifest() {
         let status = AppUpdateEvaluator.evaluate(
             currentVersion: "0.2.0",

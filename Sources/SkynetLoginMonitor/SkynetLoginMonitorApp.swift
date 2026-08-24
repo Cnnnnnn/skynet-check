@@ -20,8 +20,10 @@ struct SkynetLoginMonitorApp: App {
         let muteStore = NotificationMuteStore()
         let notifier = LoginNotifier(
             // The notifier reads the same persisted window the settings
-            // row writes; while active every notification is dropped.
-            muteProvider: { muteStore.load() }
+            // row writes; while active every notification is dropped and
+            // counted, and the first post-mute one carries the summary.
+            muteProvider: { muteStore.load() },
+            muteStore: muteStore
         )
         let monitorStore = MonitorStore(
             checker: checker,
