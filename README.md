@@ -112,6 +112,10 @@ installation commands, lets the user copy them, opens Terminal, and provides a
   early from the settings section.
 - **菜单栏显示剩余时间** adds a compact countdown ("2h10m") next to the
   status icon while authenticated and an expiry estimate exists.
+- **Shortcuts** exposes three App Intents for automations and keyboard
+  triggers: 查询登录状态 (persisted snapshot, instant), 立即检查登录 (a
+  real CLI probe) and 切换通知勿扰 (cycles the mute window). Build them
+  in the Shortcuts app; macOS does not support Siri voice phrases.
 - **检查更新** compares the installed version against a team-hosted
   manifest (`AppConfiguration.updateManifestURL`) and opens the DMG download
   page when a newer release exists. Until the real manifest URL is configured,

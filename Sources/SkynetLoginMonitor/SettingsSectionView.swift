@@ -40,6 +40,7 @@ struct SettingsSectionView: View {
                 }
                 launchAtLoginHints
                 resetStatisticsRow
+                shortcutsHint
             }
             .padding(.top, 6)
         } label: {
@@ -168,6 +169,12 @@ struct SettingsSectionView: View {
             .foregroundStyle(.secondary)
             Spacer()
         }
+    }
+
+    private var shortcutsHint: some View {
+        Text("快捷指令：查询登录状态 · 立即检查登录 · 切换通知勿扰")
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
     }
 
     @ViewBuilder

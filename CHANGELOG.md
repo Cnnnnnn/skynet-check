@@ -3,6 +3,16 @@
 All notable changes to this project are documented in this file. Versions
 follow the newest `v*` git tag; the build number is the commit count.
 
+## [Unreleased]
+
+### Added
+
+- Shortcuts integration via App Intents: "查询登录状态" (reads the
+  persisted snapshot, instant), "立即检查登录" (one real CLI probe) and
+  "切换通知勿扰" (cycles the mute window off → 30min → 1h → 4h → off)
+  are available in the Shortcuts app for automations and keyboard
+  triggers. The settings section lists the available actions.
+
 ## [0.8.0] - 2026-08-24
 
 ### Added
