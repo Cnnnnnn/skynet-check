@@ -3,10 +3,23 @@
 All notable changes to this project are documented in this file. Versions
 follow the newest `v*` git tag; the build number is the commit count.
 
-## [Unreleased]
+## [0.8.0] - 2026-08-24
 
 ### Added
 
+- New `skynet-status` command-line exit: prints the last persisted check
+  result and session-expiry estimate as JSON (exit 0), with distinct exit
+  codes when no status exists yet (1) or on internal errors (2). Read-only
+  — no CLI probes, no notifications. The packaged app now bundles it at
+  `Contents/MacOS/skynet-status`; bare copies fall back to the app's
+  defaults domain automatically.
+- Do-not-disturb: the settings section offers "暂停通知" presets (30
+  minutes / 1 hour / 4 hours). While the window is active every
+  notification is dropped (checks and panel updates continue); it
+  survives relaunches, expires automatically, and can be resumed early.
+- Optional menu-bar countdown ("2h10m") next to the status icon while
+  authenticated and an expiry estimate exists, enabled via a settings
+  toggle; refreshed once a minute.
 - A successful login automatically re-runs the component-version check
   when it was waiting for login, instead of keeping the needs-login hint
   until a manual recheck.

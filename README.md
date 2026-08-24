@@ -64,6 +64,12 @@ git tag v0.2.1
 scripts/package-team-release.sh
 ```
 
+For a local, unsigned DMG (no Developer ID certificate needed):
+
+```bash
+scripts/package-app.sh && scripts/package-dmg.sh
+```
+
 ## Install locally
 
 ```bash
@@ -100,6 +106,12 @@ installation commands, lets the user copy them, opens Terminal, and provides a
   produces a “无需重新登录” notification; an invalid session opens the Skynet
   browser login flow and reports the completed result.
 - **开机启动** uses the macOS Login Items service.
+- **暂停通知** (do-not-disturb) drops all notifications for a preset window
+  (30 minutes / 1 hour / 4 hours) while checks and panel updates continue.
+  The window survives relaunches, expires automatically, and can be resumed
+  early from the settings section.
+- **菜单栏显示剩余时间** adds a compact countdown ("2h10m") next to the
+  status icon while authenticated and an expiry estimate exists.
 - **检查更新** compares the installed version against a team-hosted
   manifest (`AppConfiguration.updateManifestURL`) and opens the DMG download
   page when a newer release exists. Until the real manifest URL is configured,
