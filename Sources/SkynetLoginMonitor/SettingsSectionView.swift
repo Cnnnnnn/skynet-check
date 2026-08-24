@@ -13,6 +13,7 @@ struct SettingsSectionView: View {
     @State private var launchAtLoginEnabled: Bool
     @State private var launchAtLoginMessage: String?
     @State private var isExpanded = false
+    @AppStorage("menuBarShowsCountdown") private var showCountdown = false
     // Bumping this re-reads the mute store so the row reflects pause/resume.
     @State private var refreshTick = 0
 
@@ -32,6 +33,7 @@ struct SettingsSectionView: View {
             VStack(alignment: .leading, spacing: 10) {
                 launchAtLoginRow
                 pollingIntervalRow
+                countdownToggleRow
                 muteRow
                 if store.showsUpdateCheck {
                     updateCheckRow
@@ -90,6 +92,19 @@ struct SettingsSectionView: View {
             return "暂停 \(minutes) 分钟"
         }
         return "暂停 \(minutes / 60) 小时"
+    }
+
+    private var countdownToggleRow: some View {
+        HStack {
+            Label("菜单栏显示剩余时间", systemImage: "clock.badge")
+                .font(.subheadline)
+            Spacer()
+            Toggle("", isOn: $showCountdown)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .accessibilityLabel(Text("菜单栏显示剩余时间"))
+        }
     }
 
     private var launchAtLoginRow: some View {

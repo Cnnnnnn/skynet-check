@@ -116,6 +116,21 @@ public enum SessionExpiryPresentation {
         }
         return MonitorText.SessionExpiry.diagnosticsPast(stamp)
     }
+
+    // Compact menu-bar countdown ("2h10m"); nil once the estimate is in
+    // the past, where the icon alone already says the rest.
+    public static func menuBarCountdown(expiresAt: Date, now: Date = Date()) -> String? {
+        let remaining = Int(expiresAt.timeIntervalSince(now))
+        guard remaining > 0 else {
+            return nil
+        }
+        let hours = remaining / 3600
+        let minutes = (remaining % 3600) / 60
+        if hours > 0 {
+            return "\(hours)h\(minutes)m"
+        }
+        return "\(max(minutes, 1))m"
+    }
 }
 
 public struct SessionExpiryTracker: Sendable {
