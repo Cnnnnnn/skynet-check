@@ -7,22 +7,32 @@ import SkynetMonitorCore
 @main
 struct StatusCommand {
     static func main() {
-        // The app persists its snapshots under its own bundle identifier's
-        // defaults domain; reading .standard here would see a different,
-        // empty store. A bare swift-build binary has no Info.plist, so it
-        // falls back to the packaged app's known bundle ID.
+        // The app persists snapshots under its bundle identifier's defaults
+        // domain. Three run contexts:
+        // - inside the packaged app: Bundle.main carries its identifier and
+        //   .standard already IS that domain (a suite of the same name is
+        //   rejected by macOS);
+        // - bare binary: no Info.plist, open the app's domain as an
+        //   explicit suite;
+        // - any other host bundle: read that bundle's own domain.
         let bundleID = Bundle.main.object(
             forInfoDictionaryKey: "CFBundleIdentifier"
         ) as? String
-        let domain: String
+        let appDomain = "io.skynet.login-monitor"
+        let defaults: UserDefaults
         switch bundleID {
-        case .none, .some("SkynetLoginMonitor"), .some(""):
-            domain = "io.skynet.login-monitor"
+        case .some(appDomain):
+            defaults = .standard
+        case .none, .some("SkynetLoginMonitor"), .some("skynet-status"), .some(""):
+            guard let suite = UserDefaults(suiteName: appDomain) else {
+                fail("cannot open defaults suite \(appDomain)")
+            }
+            defaults = suite
         case .some(let id):
-            domain = id
-        }
-        guard let defaults = UserDefaults(suiteName: domain) else {
-            fail("cannot open defaults suite \(domain)")
+            guard let suite = UserDefaults(suiteName: id) else {
+                fail("cannot open defaults suite \(id)")
+            }
+            defaults = suite
         }
 
         guard let snapshot = LoginStateStore(defaults: defaults).load() else {

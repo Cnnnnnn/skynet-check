@@ -27,15 +27,28 @@ cd "$REPO_ROOT"
 /usr/bin/xcrun swift build -c release \
     --triple x86_64-apple-macosx13.0 \
     --product SkynetLoginMonitor
+/usr/bin/xcrun swift build -c release \
+    --triple arm64-apple-macosx13.0 \
+    --product skynet-status
+/usr/bin/xcrun swift build -c release \
+    --triple x86_64-apple-macosx13.0 \
+    --product skynet-status
 
 ARM_BIN_DIR="$(/usr/bin/xcrun swift build -c release --triple arm64-apple-macosx13.0 --show-bin-path)"
 INTEL_BIN_DIR="$(/usr/bin/xcrun swift build -c release --triple x86_64-apple-macosx13.0 --show-bin-path)"
 ARM_BINARY="$ARM_BIN_DIR/SkynetLoginMonitor"
 INTEL_BINARY="$INTEL_BIN_DIR/SkynetLoginMonitor"
 EXECUTABLE="$BUILD_ROOT/SkynetLoginMonitor-universal"
+ARM_STATUS="$ARM_BIN_DIR/skynet-status"
+INTEL_STATUS="$INTEL_BIN_DIR/skynet-status"
+STATUS_EXECUTABLE="$BUILD_ROOT/skynet-status-universal"
 
 if [[ ! -x "$ARM_BINARY" || ! -x "$INTEL_BINARY" ]]; then
     echo "Release executables not found for both architectures" >&2
+    exit 1
+fi
+if [[ ! -x "$ARM_STATUS" || ! -x "$INTEL_STATUS" ]]; then
+    echo "skynet-status executables not found for both architectures" >&2
     exit 1
 fi
 if [[ ! -f "$INFO_PLIST" ]]; then
@@ -54,8 +67,10 @@ if [[ -e "$APP_BUNDLE" ]]; then
     /bin/rm -rf -- "$APP_BUNDLE"
 fi
 /usr/bin/lipo -create "$ARM_BINARY" "$INTEL_BINARY" -output "$EXECUTABLE"
+/usr/bin/lipo -create "$ARM_STATUS" "$INTEL_STATUS" -output "$STATUS_EXECUTABLE"
 /bin/mkdir -p "$MACOS_DIR" "$RESOURCE_DIR"
 /bin/cp "$EXECUTABLE" "$MACOS_DIR/SkynetLoginMonitor"
+/bin/cp "$STATUS_EXECUTABLE" "$MACOS_DIR/skynet-status"
 /bin/cp "$ICON_FILE" "$RESOURCE_DIR/AppIcon.icns"
 /bin/cp "$INFO_PLIST" "$CONTENTS_DIR/Info.plist"
 

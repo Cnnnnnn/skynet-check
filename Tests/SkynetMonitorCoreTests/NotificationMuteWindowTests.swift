@@ -25,10 +25,15 @@ final class NotificationMuteWindowTests: XCTestCase {
 
         XCTAssertNil(store.load(), "no window persisted initially")
 
-        // A future deadline survives a save/load round trip.
+        // A future deadline survives a save/load round trip. Dates encode
+        // as whole seconds, so compare with second-level accuracy.
         let deadline = Date().addingTimeInterval(1800)
         store.pause(until: deadline)
-        XCTAssertEqual(store.load()?.pausedUntil, deadline)
+        XCTAssertEqual(
+            store.load()?.pausedUntil.timeIntervalSince1970 ?? 0,
+            deadline.timeIntervalSince1970,
+            accuracy: 1.0
+        )
 
         // An expired persisted window reads as inactive.
         store.pause(until: Date().addingTimeInterval(-60))
