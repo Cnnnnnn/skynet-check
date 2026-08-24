@@ -50,10 +50,8 @@ struct McpPinUpgradeHint: View {
     }
 
     private func revealConfigFile() {
-        let configURL = URL(
-            fileURLWithPath: ("~/.zcode/cli/config.json" as NSString)
-                .expandingTildeInPath
-        )
-        NSWorkspace.shared.activateFileViewerSelecting([configURL])
+        NSWorkspace.shared.activateFileViewerSelecting([
+            SkynetEndpoints.zcodeConfigURL,
+        ])
     }
 }

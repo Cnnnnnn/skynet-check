@@ -76,9 +76,8 @@ public actor HTTPSkynetPlatformClient: SkynetSkillVersionFetching {
     private let session: URLSession
 
     public init(
-        sessionURL: URL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".skynet-cli/session.json"),
-        apiBase: URL = URL(string: "https://de.shopee.io")!,
+        sessionURL: URL = SkynetEndpoints.homeRelative(SkynetEndpoints.sessionPath),
+        apiBase: URL = URL(string: SkynetEndpoints.skillPlatformBase)!,
         session: URLSession = URLSession(configuration: {
             let configuration = URLSessionConfiguration.ephemeral
             configuration.timeoutIntervalForRequest = 15

@@ -45,7 +45,7 @@ public struct ConfluenceTokenValidator: ServiceTokenValidating {
     private let session: URLSession
 
     public init(
-        baseURL: URL = URL(string: "https://confluence.shopee.io")!,
+        baseURL: URL = URL(string: SkynetEndpoints.confluenceBase)!,
         session: URLSession = .shared
     ) {
         self.baseURL = baseURL

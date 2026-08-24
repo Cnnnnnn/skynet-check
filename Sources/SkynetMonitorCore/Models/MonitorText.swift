@@ -192,7 +192,7 @@ public enum MonitorText {
             from: String,
             to: String
         ) -> String {
-            "\(package)@\(from) → @\(to)（编辑 ~/.zcode/cli/config.json）"
+            "\(package)@\(from) → @\(to)（编辑 ~/\(SkynetEndpoints.zcodeConfigPath)）"
         }
         public static func copyNewVersion(_ version: String) -> String {
             "复制新版本号 \(version)"

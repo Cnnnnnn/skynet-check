@@ -38,8 +38,7 @@ public struct ServiceTokenStore: ServiceTokenReading {
     private let tokensURL: URL
 
     public init(
-        tokensURL: URL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".skynet-cli/tokens.json")
+        tokensURL: URL = SkynetEndpoints.homeRelative(SkynetEndpoints.tokensPath)
     ) {
         self.tokensURL = tokensURL
     }

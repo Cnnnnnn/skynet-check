@@ -13,7 +13,8 @@ public actor RegistryCLIVersionChecker: CLIVersionChecking {
 
     public init(
         registryURL: URL = URL(
-            string: "https://npm.shopee.io/@shopee%2Fskynet-cli/latest"
+            string: SkynetEndpoints.npmRegistryBase
+                + "/@shopee%2Fskynet-cli/latest"
         )!,
         session: URLSession = .shared
     ) {

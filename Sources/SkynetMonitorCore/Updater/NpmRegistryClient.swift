@@ -49,14 +49,12 @@ public actor HTTPNpmRegistryClient: NpmRegistryLatestFetching {
     ) -> [Endpoint] {
         var endpoints = [
             Endpoint(
-                url: URL(string: "https://npm.shopee.io")!,
-                authHost: "npm.shopee.io"
+                url: URL(string: SkynetEndpoints.npmRegistryBase)!,
+                authHost: URL(string: SkynetEndpoints.npmRegistryBase)!.host!
             ),
             Endpoint(
-                url: URL(
-                    string: "https://nexus.npt.seabank.io/repository/npm-bank"
-                )!,
-                authHost: "nexus.npt.seabank.io"
+                url: URL(string: SkynetEndpoints.npmBankRegistryURL)!,
+                authHost: SkynetEndpoints.npmBankAuthHost
             ),
         ]
         guard let contents else {

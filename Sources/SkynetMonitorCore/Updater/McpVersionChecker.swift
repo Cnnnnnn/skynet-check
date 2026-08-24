@@ -176,10 +176,8 @@ public actor McpVersionChecker: McpVersionChecking {
     private let fileManager: FileManager
 
     public init(
-        configURL: URL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".zcode/cli/config.json"),
-        cursorConfigURL: URL? = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".cursor/mcp.json"),
+        configURL: URL = SkynetEndpoints.zcodeConfigURL,
+        cursorConfigURL: URL? = SkynetEndpoints.homeRelative(SkynetEndpoints.cursorConfigPath),
         registry: any NpmRegistryLatestFetching,
         binarySearchPaths: [String]? = nil,
         fileManager: FileManager = .default
@@ -214,22 +212,39 @@ public actor McpVersionChecker: McpVersionChecking {
 
     public func checkVersions() async -> [McpVersionFinding] {
         // Both IDE configs are read; identical server names stay separate
-        // findings because each config can pin a different version.
+        // findings because each config can pin a different version. A file
+        // that exists but cannot be read or parsed is logged — "no servers"
+        // and "unreadable config" must stay distinguishable.
         var sourcedEntries: [(entry: McpServerEntry, source: String)] = []
-        if let data = try? Data(contentsOf: configURL),
-           let entries = McpConfigParser.parseServers(from: data)
-        {
-            sourcedEntries.append(
-                contentsOf: entries.map { ($0, "ZCode") }
-            )
+        if FileManager.default.fileExists(atPath: configURL.path) {
+            if let data = try? Data(contentsOf: configURL),
+               let entries = McpConfigParser.parseServers(from: data)
+            {
+                sourcedEntries.append(
+                    contentsOf: entries.map { ($0, "ZCode") }
+                )
+            } else {
+                let path = self.configURL.path
+                MonitorLog.store.error(
+                    "zcode MCP config exists at \(path, privacy: .public) but could not be read or parsed"
+                )
+            }
         }
-        if let cursorConfigURL,
-           let data = try? Data(contentsOf: cursorConfigURL),
-           let entries = McpConfigParser.parseCursorServers(from: data)
-        {
-            sourcedEntries.append(
-                contentsOf: entries.map { ($0, "Cursor") }
-            )
+        if let cursorConfigURL {
+            if FileManager.default.fileExists(atPath: cursorConfigURL.path) {
+                if let data = try? Data(contentsOf: cursorConfigURL),
+                   let entries = McpConfigParser.parseCursorServers(from: data)
+                {
+                    sourcedEntries.append(
+                        contentsOf: entries.map { ($0, "Cursor") }
+                    )
+                } else {
+                    let path = cursorConfigURL.path
+                    MonitorLog.store.error(
+                        "cursor MCP config exists at \(path, privacy: .public) but could not be read or parsed"
+                    )
+                }
+            }
         }
         guard !sourcedEntries.isEmpty else {
             return []
