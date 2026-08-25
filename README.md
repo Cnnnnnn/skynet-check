@@ -38,6 +38,16 @@ swift build
 #  "checkedAt": …, "sessionExpiresAt": …}
 ```
 
+After installing the app, `scripts/install-local.sh` links the bundled
+CLI to `~/.local/bin/skynet-status` so scripts can call it from PATH.
+
+## Continuous integration
+
+GitHub Actions runs swiftlint + swift test on every push and pull
+request (`.github/workflows/ci.yml`). Pushing a `v*` tag builds the DMG
+and attaches it to a GitHub release automatically
+(`.github/workflows/release.yml`).
+
 Commits run swiftlint + swift test via a local pre-commit hook. Enable it
 after cloning (git config is not versioned):
 

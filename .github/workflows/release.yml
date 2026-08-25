@@ -1,0 +1,29 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The version comes from git describe over tags.
+          fetch-depth: 0
+
+      - name: Package app
+        run: scripts/package-app.sh
+
+      - name: Build DMG
+        run: scripts/package-dmg.sh
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "build/*.dmg"
+          generate_release_notes: true

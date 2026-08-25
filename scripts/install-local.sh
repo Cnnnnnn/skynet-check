@@ -47,6 +47,20 @@ fi
 
 /usr/bin/ditto "$SOURCE_APP" "$DESTINATION_APP"
 
+# Link the bundled status CLI into ~/.local/bin so scripts can call it
+# from PATH without the full app-bundle path.
+STATUS_CLI_SOURCE="$DESTINATION_APP/Contents/MacOS/skynet-status"
+STATUS_CLI_DIR="$HOME/.local/bin"
+if [[ -x "$STATUS_CLI_SOURCE" ]]; then
+    /bin/mkdir -p "$STATUS_CLI_DIR"
+    /bin/ln -sf "$STATUS_CLI_SOURCE" "$STATUS_CLI_DIR/skynet-status"
+    echo "Linked: $STATUS_CLI_DIR/skynet-status -> $STATUS_CLI_SOURCE"
+    case ":$PATH:" in
+        *":$STATUS_CLI_DIR:"*) ;;
+        *) echo "Note: add $STATUS_CLI_DIR to your PATH to use skynet-status." ;;
+    esac
+fi
+
 if [[ -d "$SKYNET_MONITOR_CONFIG_DIR" ]]; then
     echo "Current modes:"
     /usr/bin/stat -f "%Sp %N" "$SKYNET_MONITOR_CONFIG_DIR"
