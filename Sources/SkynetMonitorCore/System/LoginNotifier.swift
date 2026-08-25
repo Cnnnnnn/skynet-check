@@ -1,5 +1,7 @@
 import Foundation
-import UserNotifications
+// UNNotificationSettings is not yet marked Sendable; @preconcurrency
+// downgrades the strict-concurrency diagnostic until the SDK catches up.
+@preconcurrency import UserNotifications
 
 @MainActor
 public protocol LoginNotifying: AnyObject {
