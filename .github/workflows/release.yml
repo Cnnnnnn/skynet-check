@@ -9,7 +9,10 @@ permissions:
 
 jobs:
   dmg:
-    runs-on: macos-14
+    runs-on: macos-15
+    env:
+      # Xcode 16 ships the Swift 6 toolchain the package requires.
+      DEVELOPER_DIR: /Applications/Xcode_16.2.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
         with:
