@@ -177,6 +177,17 @@ public enum MonitorText {
         public static func mcpUpgradeTitle(_ count: Int) -> String {
             "\(count) 个 MCP 可升级"
         }
+        // Collapsed-card badge: "6 个 MCP 可升级", never "MCP 6 可升级".
+        public static func upgradableBadge(skillCount: Int, mcpCount: Int) -> String {
+            var parts: [String] = []
+            if skillCount > 0 {
+                parts.append("\(skillCount) 个 Skill")
+            }
+            if mcpCount > 0 {
+                parts.append("\(mcpCount) 个 MCP")
+            }
+            return parts.joined(separator: " · ") + " \(upgradableSuffix)"
+        }
         public static let unpinnedDetail = "未固定版本"
         public static let unavailableDetail = "无法确定"
         public static let upgradableSuffix = "可升级"
@@ -184,20 +195,9 @@ public enum MonitorText {
         public static func lastChecked(_ time: String) -> String {
             "上次检查 \(time)"
         }
-        public static func pinUpgradeTitle(_ serverName: String) -> String {
-            "\(serverName) 的版本 pin 需手动更新"
-        }
-        public static func pinUpgradeDetail(
-            package: String,
-            from: String,
-            to: String
-        ) -> String {
-            "\(package)@\(from) → @\(to)（编辑 ~/\(SkynetEndpoints.zcodeConfigPath)）"
-        }
-        public static func copyNewVersion(_ version: String) -> String {
-            "复制新版本号 \(version)"
-        }
-        public static let revealConfig = "在 Finder 中查看"
+        public static let copyUpgradeCommand = "复制升级命令"
+        public static let copyAllUpgradeCommands = "复制全部升级命令"
+        public static let openTerminalUpgrade = "Terminal 升级"
         public static let updatesNotificationTitle = "Skynet 组件有可更新"
         public static func updatesNotificationBody(
             skillCount: Int,

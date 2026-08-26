@@ -5,6 +5,19 @@ follow the newest `v*` git tag; the build number is the commit count.
 
 ## [Unreleased]
 
+### Changed
+
+- MCP version checks now read Cursor (`~/.cursor/mcp.json`) and Codex
+  (`~/.codex/config.toml`) only; ZCode's config is no longer scanned.
+- Component-version card badge wording and layout: title stays on the
+  left, status like "6 个 MCP 可升级" on the right; orange tint only when
+  upgrades exist.
+- Each upgradable MCP row offers a copyable Terminal command: pinned
+  npx packages bump `package@old` in the IDE config; platform MCPs use
+  `skynet mcp install '<name>'`; `skynet-base` with an absolute nvm path
+  uses that node's `npm install -g` (Cursor often pins a different Node
+  than the active shell). Pinned Node versions show in the detail line.
+
 ## [0.9.0] - 2026-08-26
 
 ### Added

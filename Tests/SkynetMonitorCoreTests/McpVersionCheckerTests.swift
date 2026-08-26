@@ -59,11 +59,11 @@ final class McpVersionCheckerTests: XCTestCase {
 
         let configURL = writeTemporaryFile(
             json: """
-            {"mcp":{"servers":{
-              "skynet-base":{"type":"stdio","command":"\(root.path)/bin/skynet-mcp","args":[]},
-              "banking":{"type":"stdio","command":"npx","args":["-y","@shopee/banking-fe-mcp@0.2.27"]},
-              "gitlab":{"type":"stdio","command":"npx","args":["-y","@zereight/mcp-gitlab"]}
-            }}}
+            {"mcpServers":{
+              "skynet-base":{"command":"\(root.path)/bin/skynet-mcp","args":[]},
+              "banking":{"command":"npx","args":["-y","@shopee/banking-fe-mcp@0.2.27"]},
+              "gitlab":{"command":"npx","args":["-y","@zereight/mcp-gitlab"]}
+            }}
             """
         )
         let registry = StubRegistry(
@@ -73,8 +73,8 @@ final class McpVersionCheckerTests: XCTestCase {
             ]
         )
         let checker = McpVersionChecker(
-            configURL: configURL,
-            cursorConfigURL: nil,
+            cursorConfigURL: configURL,
+            codexConfigURL: nil,
             registry: registry,
             binarySearchPaths: []
         )
@@ -88,7 +88,8 @@ final class McpVersionCheckerTests: XCTestCase {
                 serverName: "skynet-base",
                 packageName: "@shopee/skynet-base",
                 installedVersion: "2.11.5",
-                latestVersion: "2.12.2"
+                latestVersion: "2.12.2",
+                configuredCommand: "\(root.path)/bin/skynet-mcp"
             )
         )
         XCTAssertEqual(
@@ -126,14 +127,14 @@ final class McpVersionCheckerTests: XCTestCase {
 
         let configURL = writeTemporaryFile(
             json: """
-            {"mcp":{"servers":{
-              "flow":{"type":"stdio","command":"banking-fe-mcp","args":[]}
-            }}}
+            {"mcpServers":{
+              "flow":{"command":"banking-fe-mcp","args":[]}
+            }}
             """
         )
         let checker = McpVersionChecker(
-            configURL: configURL,
-            cursorConfigURL: nil,
+            cursorConfigURL: configURL,
+            codexConfigURL: nil,
             registry: StubRegistry(versions: ["@shopee/skynet.bank-fe-flow": "0.8.9"]),
             binarySearchPaths: [alternateBin.path]
         )
@@ -147,7 +148,8 @@ final class McpVersionCheckerTests: XCTestCase {
                     serverName: "flow",
                     packageName: "@shopee/skynet.bank-fe-flow",
                     installedVersion: "0.8.9",
-                    latestVersion: "0.8.9"
+                    latestVersion: "0.8.9",
+                    configuredCommand: "banking-fe-mcp"
                 ),
             ]
         )
@@ -188,7 +190,7 @@ final class McpVersionCheckerTests: XCTestCase {
         )
     }
 
-    func testCursorConfigFindingsCarrySource() async throws {
+    func testCursorAndCodexConfigFindingsCarrySource() async throws {
         let root = makeTemporaryDirectory()
         let packageURL = root
             .appendingPathComponent("lib/node_modules/@shopee/skynet-base")
@@ -211,13 +213,6 @@ final class McpVersionCheckerTests: XCTestCase {
             contents: nil
         )
 
-        let zcodeConfig = writeTemporaryFile(
-            json: """
-            {"mcp":{"servers":{
-              "skynet-base":{"type":"stdio","command":"\(root.path)/bin/skynet-mcp","args":[]}
-            }}}
-            """
-        )
         let cursorConfig = writeTemporaryFile(
             json: """
             {"mcpServers":{
@@ -225,9 +220,16 @@ final class McpVersionCheckerTests: XCTestCase {
             }}
             """
         )
+        let codexConfig = writeTemporaryFile(
+            json: """
+            [mcp_servers.skynet-base]
+            command = "\(root.path)/bin/skynet-mcp"
+            args = []
+            """
+        )
         let checker = McpVersionChecker(
-            configURL: zcodeConfig,
             cursorConfigURL: cursorConfig,
+            codexConfigURL: codexConfig,
             registry: StubRegistry(versions: ["@shopee/skynet-base": "2.12.2"]),
             binarySearchPaths: []
         )
@@ -237,8 +239,8 @@ final class McpVersionCheckerTests: XCTestCase {
         XCTAssertEqual(
             findings.map { "\($0.serverName)|\($0.configSource)" },
             [
+                "skynet-base|Codex",
                 "skynet-base|Cursor",
-                "skynet-base|ZCode",
             ]
         )
         XCTAssertTrue(findings.allSatisfy(\.isUpgradable))

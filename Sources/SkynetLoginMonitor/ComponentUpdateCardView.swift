@@ -20,11 +20,6 @@ struct ComponentUpdateCardView: View {
         DisclosureGroup(isExpanded: $isExpanded) {
             VStack(alignment: .leading, spacing: 7) {
                 contentRows
-                Button("重新检查") {
-                    onRecheck()
-                }
-                .buttonStyle(.borderless)
-                .font(.caption)
             }
             .padding(.top, 6)
         } label: {
@@ -34,16 +29,33 @@ struct ComponentUpdateCardView: View {
                     systemImage: "arrow.triangle.2.circlepath"
                 )
                 .font(.subheadline.weight(.semibold))
+                Spacer(minLength: 4)
                 if let badge = badgeText {
                     Text(badge)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
             }
         }
         .padding(10)
-        .background(Color.purple.opacity(0.08))
+        .background(cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    // Match the blue cards; only tint when something is actually upgradable
+    // so the purple-looking outlier does not read as a layout bug.
+    private var cardBackground: Color {
+        hasUpgrades ? Color.orange.opacity(0.10) : Color.blue.opacity(0.08)
+    }
+
+    private var hasUpgrades: Bool {
+        guard case .completed = phase else {
+            return false
+        }
+        let outdatedSkills = skillReport?.updates.count ?? 0
+        let upgradableMCPs = mcpFindings.filter(\.isUpgradable).count
+        return outdatedSkills > 0 || upgradableMCPs > 0
     }
 
     private var badgeText: String? {
@@ -58,14 +70,10 @@ struct ComponentUpdateCardView: View {
             guard outdatedSkills > 0 || upgradableMCPs > 0 else {
                 return MonitorText.UpdateCheck.upToDate
             }
-            var parts: [String] = []
-            if outdatedSkills > 0 {
-                parts.append("Skill \(outdatedSkills)")
-            }
-            if upgradableMCPs > 0 {
-                parts.append("MCP \(upgradableMCPs)")
-            }
-            return parts.joined(separator: " · ") + " \(MonitorText.ComponentUpdate.upgradableSuffix)"
+            return MonitorText.ComponentUpdate.upgradableBadge(
+                skillCount: outdatedSkills,
+                mcpCount: upgradableMCPs
+            )
         }
     }
 
@@ -74,7 +82,6 @@ struct ComponentUpdateCardView: View {
         statusRow
         skillRows
         mcpRows
-        pinUpgradeRow
         if let checkedAt {
             Label(
                 MonitorText.ComponentUpdate.lastChecked(
@@ -172,14 +179,19 @@ struct ComponentUpdateCardView: View {
             ForEach(mcpFindings) { finding in
                 mcpRow(finding)
             }
-            if mcpFindings.contains(where: \.isUpgradable) {
+            let upgradable = mcpFindings.filter(\.isUpgradable)
+            if upgradable.count > 1,
+               let script = CLIInstallGuide.mcpUpgradeScript(for: upgradable)
+            {
                 UpgradeActionRow(
                     title: MonitorText.ComponentUpdate.mcpUpgradeTitle(
-                        mcpFindings.filter(\.isUpgradable).count
+                        upgradable.count
                     ),
                     detail: nil,
-                    primaryLabel: "用 Terminal 升级",
-                    primaryCommand: CLIInstallGuide.mcpRepairCommand
+                    primaryLabel: MonitorText.ComponentUpdate.openTerminalUpgrade,
+                    primaryCommand: script,
+                    fallbackLabel: MonitorText.ComponentUpdate.copyAllUpgradeCommands,
+                    fallbackCommand: script
                 )
             }
         }
@@ -207,36 +219,28 @@ struct ComponentUpdateCardView: View {
         }
     }
 
-    // npx-pinned servers keep their version inside the ZCode config; see
-    // McpPinUpgradeHint for why the help is copy/reveal rather than an
-    // in-app upgrade.
-    @ViewBuilder
-    private var pinUpgradeRow: some View {
-        if let pinned = mcpFindings.first(where: { $0.isNPXPinned && $0.isUpgradable }) {
-            McpPinUpgradeHint(finding: pinned)
-        }
-    }
-
+    // Generated command rewrites IDE configs via `skynet mcp install`.
     private func mcpRow(_ finding: McpVersionFinding) -> some View {
-        HStack(spacing: 6) {
-            Image(
-                systemName: finding.isUpgradable
-                    ? "arrow.up.circle.fill" : "checkmark.circle"
-            )
-            .foregroundStyle(finding.isUpgradable ? .orange : .green)
-            .accessibilityHidden(true)
-            Text(
-                finding.configSource == "ZCode"
-                    ? finding.serverName
-                    : "\(finding.serverName)（\(finding.configSource)）"
-            )
-                .font(.caption)
-                .lineLimit(1)
-            Spacer()
-            Text(mcpDetail(finding))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(
+                    systemName: finding.isUpgradable
+                        ? "arrow.up.circle.fill" : "checkmark.circle"
+                )
+                .foregroundStyle(finding.isUpgradable ? .orange : .green)
+                .accessibilityHidden(true)
+                Text("\(finding.serverName)（\(finding.configSource)）")
+                    .font(.caption)
+                    .lineLimit(1)
+                Spacer()
+                Text(mcpDetail(finding))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            if finding.isUpgradable {
+                McpUpgradeCommandRow(finding: finding)
+            }
         }
     }
 
@@ -251,9 +255,27 @@ struct ComponentUpdateCardView: View {
             return "\(installed) · \(MonitorText.ComponentUpdate.unavailableDetail)"
         }
         if finding.isUpgradable {
+            if let node = pinnedNodeHint(finding) {
+                return "\(installed) → \(latest) · node \(node)"
+            }
             return "\(installed) → \(latest)"
         }
         return "\(installed) \(MonitorText.UpdateCheck.upToDate)"
+    }
+
+    private func pinnedNodeHint(_ finding: McpVersionFinding) -> String? {
+        guard let command = finding.configuredCommand,
+              command.contains("/.nvm/versions/node/")
+        else {
+            return nil
+        }
+        let parts = command.split(separator: "/")
+        guard let index = parts.firstIndex(of: "node"),
+              index + 1 < parts.count
+        else {
+            return nil
+        }
+        return String(parts[index + 1])
     }
 
     private func sectionHeader(

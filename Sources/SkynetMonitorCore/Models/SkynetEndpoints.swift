@@ -17,8 +17,8 @@ public enum SkynetEndpoints {
 
     // MARK: config paths (relative to the user's home)
 
-    public static let zcodeConfigPath = ".zcode/cli/config.json"
     public static let cursorConfigPath = ".cursor/mcp.json"
+    public static let codexConfigPath = ".codex/config.toml"
     public static let sessionPath = ".skynet-cli/session.json"
     public static let tokensPath = ".skynet-cli/tokens.json"
 
@@ -29,7 +29,11 @@ public enum SkynetEndpoints {
             .appendingPathComponent(relative)
     }
 
-    public static var zcodeConfigURL: URL {
-        homeRelative(zcodeConfigPath)
+    public static var cursorConfigURL: URL {
+        homeRelative(cursorConfigPath)
+    }
+
+    public static var codexConfigURL: URL {
+        homeRelative(codexConfigPath)
     }
 }

@@ -70,16 +70,16 @@ final class McpConfigParsingTests: XCTestCase {
     func testMcpConfigParsing() {
         let data = Data(
             """
-            {"mcp":{"servers":{
-              "zeta":{"type":"stdio","command":"npx","args":["-y","p@1.0"]},
-              "alpha":{"type":"stdio","command":"/bin/alpha","args":[]},
-              "broken":{"type":"stdio","args":[]}
-            }}}
+            {"mcpServers":{
+              "zeta":{"command":"npx","args":["-y","p@1.0"]},
+              "alpha":{"command":"/bin/alpha","args":[]},
+              "broken":{"args":[]}
+            }}
             """
                 .utf8
         )
 
-        let entries = McpConfigParser.parseServers(from: data)
+        let entries = McpConfigParser.parseCursorServers(from: data)
 
         XCTAssertEqual(
             entries,
@@ -88,7 +88,50 @@ final class McpConfigParsingTests: XCTestCase {
                 McpServerEntry(name: "zeta", command: "npx", arguments: ["-y", "p@1.0"]),
             ]
         )
-        XCTAssertNil(McpConfigParser.parseServers(from: Data("nope".utf8)))
+        XCTAssertNil(McpConfigParser.parseCursorServers(from: Data("nope".utf8)))
+    }
+
+    func testCodexTomlParsing() {
+        let text = """
+        model = "gpt"
+
+        [mcp_servers.serena]
+        command = "/usr/local/bin/serena"
+        args = [ "start", "--flag" ]
+
+        [mcp_servers.serena.env]
+        PATH = "/usr/bin"
+
+        [mcp_servers."Banking FE MCP"]
+        type = "stdio"
+        command = "npx"
+        args = [ "-y", "@shopee/banking-fe-mcp@0.2.27" ]
+
+        [mcp_servers.amap]
+        url = "https://example.com/mcp"
+
+        [mcp_servers.disabled]
+        command = "/bin/old"
+        enabled = false
+        """
+
+        let entries = McpConfigParser.parseCodexServers(from: text)
+
+        XCTAssertEqual(
+            entries,
+            [
+                McpServerEntry(
+                    name: "Banking FE MCP",
+                    command: "npx",
+                    arguments: ["-y", "@shopee/banking-fe-mcp@0.2.27"]
+                ),
+                McpServerEntry(
+                    name: "serena",
+                    command: "/usr/local/bin/serena",
+                    arguments: ["start", "--flag"]
+                ),
+            ]
+        )
     }
 
     // MARK: - node_modules resolution

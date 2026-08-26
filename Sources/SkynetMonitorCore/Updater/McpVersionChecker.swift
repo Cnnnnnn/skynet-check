@@ -74,9 +74,12 @@ public struct McpVersionFinding: Codable, Equatable, Sendable {
     // True when the installed version is a pin written in the config file
     // (npx -y pkg@version): upgrading means editing that pin, not npm.
     public let isNPXPinned: Bool
-    // Which IDE's MCP config the entry came from ("ZCode" / "Cursor") —
+    // Which IDE's MCP config the entry came from ("Cursor" / "Codex") —
     // the same package may be wired into both at different versions.
     public let configSource: String
+    // command from the IDE config; Cursor often pins an absolute nvm path
+    // that differs from the shell's active `nvm use`.
+    public let configuredCommand: String?
 
     public init(
         serverName: String,
@@ -85,7 +88,8 @@ public struct McpVersionFinding: Codable, Equatable, Sendable {
         latestVersion: String? = nil,
         unpinned: Bool = false,
         isNPXPinned: Bool = false,
-        configSource: String = "ZCode"
+        configSource: String = "Cursor",
+        configuredCommand: String? = nil
     ) {
         self.serverName = serverName
         self.packageName = packageName
@@ -94,6 +98,7 @@ public struct McpVersionFinding: Codable, Equatable, Sendable {
         self.unpinned = unpinned
         self.isNPXPinned = isNPXPinned
         self.configSource = configSource
+        self.configuredCommand = configuredCommand
     }
 
     public var isUpgradable: Bool {
@@ -131,25 +136,8 @@ public enum McpConfigParser {
             .sorted { $0.name < $1.name }
     }
 
-    // Reads the ZCode MCP config shape:
-    // {"mcp":{"servers":{"<name>":{"type":"stdio","command":…,"args":[…]}}}}
-    public static func parseServers(from data: Data) -> [McpServerEntry]? {
-        struct Config: Decodable {
-            let mcp: MCP?
-            struct MCP: Decodable {
-                let servers: [String: Server]?
-            }
-        }
-
-        guard let config = try? JSONDecoder().decode(Config.self, from: data) else {
-            return nil
-        }
-        return entries(from: config.mcp?.servers ?? [:])
-    }
-
     // Cursor keeps its MCP servers in ~/.cursor/mcp.json under
-    // {"mcpServers":{"<name>":{"command":…,"args":[…]}}} — same fields,
-    // different nesting.
+    // {"mcpServers":{"<name>":{"command":…,"args":[…]}}}.
     public static func parseCursorServers(from data: Data) -> [McpServerEntry]? {
         struct Config: Decodable {
             let mcpServers: [String: Server]?
@@ -160,6 +148,128 @@ public enum McpConfigParser {
         }
         return entries(from: config.mcpServers ?? [:])
     }
+
+    // Codex stores MCP servers in ~/.codex/config.toml as
+    // [mcp_servers.<name>] tables with command / args. No TOML dependency:
+    // only the fields the version checker needs are scraped.
+    public static func parseCodexServers(from data: Data) -> [McpServerEntry]? {
+        guard let text = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        return parseCodexServers(from: text)
+    }
+
+    public static func parseCodexServers(from text: String) -> [McpServerEntry] {
+        var entries: [McpServerEntry] = []
+        var currentName: String?
+        var command: String?
+        var arguments: [String] = []
+        var enabled = true
+        var collectingArgs = false
+        var argsBuffer = ""
+
+        func flush() {
+            defer {
+                currentName = nil
+                command = nil
+                arguments = []
+                enabled = true
+                collectingArgs = false
+                argsBuffer = ""
+            }
+            guard let name = currentName,
+                  enabled,
+                  let command,
+                  !command.isEmpty
+            else {
+                return
+            }
+            entries.append(
+                McpServerEntry(name: name, command: command, arguments: arguments)
+            )
+        }
+
+        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            if collectingArgs {
+                argsBuffer += " " + line
+                if line.contains("]") {
+                    arguments = Self.tomlStringArray(argsBuffer)
+                    collectingArgs = false
+                    argsBuffer = ""
+                }
+                continue
+            }
+            if line.hasPrefix("[") {
+                flush()
+                currentName = Self.codexServerName(fromHeader: line)
+                continue
+            }
+            guard currentName != nil else {
+                continue
+            }
+            if line.hasPrefix("command") {
+                if let value = Self.tomlStringValue(line) {
+                    command = value
+                }
+            } else if line.hasPrefix("args") {
+                if line.contains("]") {
+                    arguments = Self.tomlStringArray(line)
+                } else {
+                    collectingArgs = true
+                    argsBuffer = line
+                }
+            } else if line.hasPrefix("enabled") {
+                enabled = !line.contains("false")
+            }
+        }
+        flush()
+        return entries.sorted { $0.name < $1.name }
+    }
+
+    // [mcp_servers.name] / [mcp_servers."Name With Spaces"] — subtables
+    // like [mcp_servers.name.env] are ignored (key contains an extra ".").
+    private static func codexServerName(fromHeader line: String) -> String? {
+        guard line.hasPrefix("[mcp_servers."), line.hasSuffix("]") else {
+            return nil
+        }
+        let inner = String(line.dropFirst("[mcp_servers.".count).dropLast())
+        let name: String
+        if inner.hasPrefix("\""), inner.hasSuffix("\""), inner.count >= 2 {
+            name = String(inner.dropFirst().dropLast())
+        } else {
+            name = inner
+        }
+        if name.isEmpty || name.contains(".") {
+            return nil
+        }
+        return name
+    }
+
+    private static func tomlStringValue(_ line: String) -> String? {
+        guard let start = line.firstIndex(of: "\"") else {
+            return nil
+        }
+        let after = line.index(after: start)
+        guard let end = line[after...].firstIndex(of: "\"") else {
+            return nil
+        }
+        return String(line[after..<end])
+    }
+
+    private static func tomlStringArray(_ text: String) -> [String] {
+        var values: [String] = []
+        var remaining = text[...]
+        while let start = remaining.firstIndex(of: "\"") {
+            let after = remaining.index(after: start)
+            guard let end = remaining[after...].firstIndex(of: "\"") else {
+                break
+            }
+            values.append(String(remaining[after..<end]))
+            remaining = remaining[remaining.index(after: end)...]
+        }
+        return values
+    }
 }
 
 public protocol McpVersionChecking: Sendable {
@@ -167,23 +277,23 @@ public protocol McpVersionChecking: Sendable {
 }
 
 // Detection only: the findings name the installed and latest versions; the
-// upgrade itself is the CLI's `skynet update tools` / npm's job.
+// upgrade itself is `skynet mcp install name@vX` (see CLIInstallGuide).
 public actor McpVersionChecker: McpVersionChecking {
-    private let configURL: URL
     private let cursorConfigURL: URL?
+    private let codexConfigURL: URL?
     private let registry: any NpmRegistryLatestFetching
     private let binarySearchPaths: [String]
     private let fileManager: FileManager
 
     public init(
-        configURL: URL = SkynetEndpoints.zcodeConfigURL,
-        cursorConfigURL: URL? = SkynetEndpoints.homeRelative(SkynetEndpoints.cursorConfigPath),
+        cursorConfigURL: URL? = SkynetEndpoints.cursorConfigURL,
+        codexConfigURL: URL? = SkynetEndpoints.codexConfigURL,
         registry: any NpmRegistryLatestFetching,
         binarySearchPaths: [String]? = nil,
         fileManager: FileManager = .default
     ) {
-        self.configURL = configURL
         self.cursorConfigURL = cursorConfigURL
+        self.codexConfigURL = codexConfigURL
         self.registry = registry
         self.fileManager = fileManager
         self.binarySearchPaths = binarySearchPaths ?? Self.defaultBinarySearchPaths()
@@ -211,41 +321,13 @@ public actor McpVersionChecker: McpVersionChecking {
     }
 
     public func checkVersions() async -> [McpVersionFinding] {
-        // Both IDE configs are read; identical server names stay separate
-        // findings because each config can pin a different version. A file
-        // that exists but cannot be read or parsed is logged — "no servers"
-        // and "unreadable config" must stay distinguishable.
+        // Cursor + Codex only. Identical server names stay separate findings
+        // because each config can pin a different version. A file that exists
+        // but cannot be read or parsed is logged — "no servers" and
+        // "unreadable config" must stay distinguishable.
         var sourcedEntries: [(entry: McpServerEntry, source: String)] = []
-        if FileManager.default.fileExists(atPath: configURL.path) {
-            if let data = try? Data(contentsOf: configURL),
-               let entries = McpConfigParser.parseServers(from: data)
-            {
-                sourcedEntries.append(
-                    contentsOf: entries.map { ($0, "ZCode") }
-                )
-            } else {
-                let path = self.configURL.path
-                MonitorLog.store.error(
-                    "zcode MCP config exists at \(path, privacy: .public) but could not be read or parsed"
-                )
-            }
-        }
-        if let cursorConfigURL {
-            if FileManager.default.fileExists(atPath: cursorConfigURL.path) {
-                if let data = try? Data(contentsOf: cursorConfigURL),
-                   let entries = McpConfigParser.parseCursorServers(from: data)
-                {
-                    sourcedEntries.append(
-                        contentsOf: entries.map { ($0, "Cursor") }
-                    )
-                } else {
-                    let path = cursorConfigURL.path
-                    MonitorLog.store.error(
-                        "cursor MCP config exists at \(path, privacy: .public) but could not be read or parsed"
-                    )
-                }
-            }
-        }
+        appendCursorEntries(into: &sourcedEntries)
+        appendCodexEntries(into: &sourcedEntries)
         guard !sourcedEntries.isEmpty else {
             return []
         }
@@ -267,6 +349,52 @@ public actor McpVersionChecker: McpVersionChecking {
                 ($0.serverName, $0.configSource)
                     < ($1.serverName, $1.configSource)
             }
+        }
+    }
+
+    private func appendCursorEntries(
+        into sourcedEntries: inout [(entry: McpServerEntry, source: String)]
+    ) {
+        guard let cursorConfigURL else {
+            return
+        }
+        guard FileManager.default.fileExists(atPath: cursorConfigURL.path) else {
+            return
+        }
+        if let data = try? Data(contentsOf: cursorConfigURL),
+           let entries = McpConfigParser.parseCursorServers(from: data)
+        {
+            sourcedEntries.append(
+                contentsOf: entries.map { ($0, "Cursor") }
+            )
+        } else {
+            let path = cursorConfigURL.path
+            MonitorLog.store.error(
+                "cursor MCP config exists at \(path, privacy: .public) but could not be read or parsed"
+            )
+        }
+    }
+
+    private func appendCodexEntries(
+        into sourcedEntries: inout [(entry: McpServerEntry, source: String)]
+    ) {
+        guard let codexConfigURL else {
+            return
+        }
+        guard FileManager.default.fileExists(atPath: codexConfigURL.path) else {
+            return
+        }
+        if let data = try? Data(contentsOf: codexConfigURL),
+           let entries = McpConfigParser.parseCodexServers(from: data)
+        {
+            sourcedEntries.append(
+                contentsOf: entries.map { ($0, "Codex") }
+            )
+        } else {
+            let path = codexConfigURL.path
+            MonitorLog.store.error(
+                "codex MCP config exists at \(path, privacy: .public) but could not be read or parsed"
+            )
         }
     }
 
@@ -293,7 +421,8 @@ public actor McpVersionChecker: McpVersionChecking {
                 serverName: entry.name,
                 packageName: package,
                 unpinned: true,
-                configSource: source
+                configSource: source,
+                configuredCommand: entry.command
             )
 
         case let .npxPinned(package, pinnedVersion):
@@ -303,7 +432,8 @@ public actor McpVersionChecker: McpVersionChecking {
                 installedVersion: pinnedVersion,
                 latestVersion: await registry.latestVersion(of: package),
                 isNPXPinned: true,
-                configSource: source
+                configSource: source,
+                configuredCommand: entry.command
             )
 
         case let .globalBinary(binaryName, binaryDirectory):
@@ -332,7 +462,8 @@ public actor McpVersionChecker: McpVersionChecking {
             guard let resolved = candidate else {
                 return McpVersionFinding(
                     serverName: entry.name,
-                    configSource: source
+                    configSource: source,
+                    configuredCommand: entry.command
                 )
             }
             directory = (resolved as NSString).deletingLastPathComponent
@@ -344,7 +475,8 @@ public actor McpVersionChecker: McpVersionChecking {
         ) else {
             return McpVersionFinding(
                 serverName: entry.name,
-                configSource: source
+                configSource: source,
+                configuredCommand: entry.command
             )
         }
         return McpVersionFinding(
@@ -352,7 +484,8 @@ public actor McpVersionChecker: McpVersionChecking {
             packageName: package.name,
             installedVersion: package.version,
             latestVersion: await registry.latestVersion(of: package.name),
-            configSource: source
+            configSource: source,
+            configuredCommand: entry.command
         )
     }
 }
