@@ -57,6 +57,47 @@ public struct MCPConfiguration: Equatable, Sendable {
 public enum MCPOutputParser {
     public static let coreMCPName = "skynet-base"
 
+    // Preferred path: `skynet mcp list -j` →
+    // {"Cursor":[{"name":"skynet-base","version":"v2.12.3"},…], "Claude":[], …}
+    // Empty IDE arrays are omitted so a missing Claude install does not look
+    // like "MCP configured without skynet-base".
+    public static func parseMCPList(fromJSON data: Data) -> MCPListSummary? {
+        struct Entry: Decodable {
+            let name: String
+            let version: String?
+        }
+
+        guard let groups = try? JSONDecoder().decode(
+            [String: [Entry]].self,
+            from: data
+        ) else {
+            return nil
+        }
+
+        var ideGroups: [String: Int] = [:]
+        var skynetBaseIDEs: [String] = []
+        var total = 0
+
+        for (ide, entries) in groups {
+            guard !entries.isEmpty else {
+                continue
+            }
+            ideGroups[ide] = entries.count
+            total += entries.count
+            if entries.contains(where: { $0.name == coreMCPName }) {
+                skynetBaseIDEs.append(ide)
+            }
+        }
+
+        skynetBaseIDEs.sort()
+        return MCPListSummary(
+            total: total,
+            ideGroups: ideGroups,
+            skynetBaseIDEs: skynetBaseIDEs
+        )
+    }
+
+    // Fallback for older CLIs without `-j`.
     public static func parseMCPList(_ output: String) -> MCPListSummary? {
         let totalPattern = /找到\s*(\d+)\s*个/
         let ideGroupPattern = /^\[(.+?)\]\s*\((\d+)\)$/

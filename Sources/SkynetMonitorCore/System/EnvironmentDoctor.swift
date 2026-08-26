@@ -215,8 +215,22 @@ public actor EnvironmentDoctor {
         guard let cliURL else {
             return nil
         }
-        async let mcpOutput = runCLI(cliURL, ["mcp", "list"])
+        // Prefer JSON (`-j`): Chinese text layout changes break the regex
+        // parser. Fall back to plain `mcp list` for older CLIs.
+        async let mcpJSONOutput = runCLI(cliURL, ["mcp", "list", "-j"])
         async let skillOutput = runCLI(cliURL, ["skill", "list", "--json"])
+
+        let mcpSummary: MCPListSummary?
+        if let json = await mcpJSONOutput,
+           let data = json.data(using: .utf8),
+           let parsed = MCPOutputParser.parseMCPList(fromJSON: data)
+        {
+            mcpSummary = parsed
+        } else if let text = await runCLI(cliURL, ["mcp", "list"]) {
+            mcpSummary = MCPOutputParser.parseMCPList(text)
+        } else {
+            mcpSummary = nil
+        }
 
         let installedSkills = await skillOutput?
             .data(using: .utf8)
@@ -224,7 +238,7 @@ public actor EnvironmentDoctor {
         let baseline = loadSkillBaseline()
 
         return MCPConfiguration(
-            mcpSummary: await mcpOutput.flatMap(MCPOutputParser.parseMCPList),
+            mcpSummary: mcpSummary,
             skillCount: installedSkills?.count,
             outdatedSkills: evaluateOutdatedSkills(
                 installed: installedSkills,

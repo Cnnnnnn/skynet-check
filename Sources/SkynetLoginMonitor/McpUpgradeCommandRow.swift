@@ -2,8 +2,9 @@ import AppKit
 import SkynetMonitorCore
 import SwiftUI
 
-// Per-MCP upgrade actions: copy `skynet mcp install name@vX` (and optionally
-// open Terminal). The CLI owns rewriting Cursor / Codex configs.
+// Per-MCP upgrade actions: copy the generated Terminal command (and optionally
+// open Terminal). Prefer npm --prefix / pin bump; `skynet mcp install` is only
+// a last-resort fallback for unresolved packages.
 struct McpUpgradeCommandRow: View {
     let finding: McpVersionFinding
 

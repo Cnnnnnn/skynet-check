@@ -18,6 +18,9 @@ follow the newest `v*` git tag; the build number is the commit count.
   node's npm — `skynet mcp install` often no-ops or hits pending builds).
   Missing configured binaries are called out instead of a misleading
   "node vX" badge beside a PATH-fallback version.
+- Environment diagnosis now prefers `skynet mcp list -j` (falls back to
+  the Chinese text parser on older CLIs), so MCP totals stay aligned with
+  the CLI instead of fragile regex over layout.
 
 ## [0.9.0] - 2026-08-26
 

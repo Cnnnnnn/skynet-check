@@ -29,6 +29,26 @@ final class MCPOutputParserTests: XCTestCase {
         XCTAssertEqual(summary.skynetBaseIDEs, ["Cursor"])
     }
 
+    func testParsesMCPListFromJSON() throws {
+        let summary = try XCTUnwrap(
+            MCPOutputParser.parseMCPList(fromJSON: Data(mcpListJSON.utf8))
+        )
+
+        XCTAssertEqual(summary.total, 5)
+        XCTAssertEqual(summary.ideGroups, ["Cursor": 3, "Codex": 2])
+        XCTAssertEqual(summary.skynetBaseIDEs, ["Cursor"])
+        XCTAssertNil(summary.ideGroups["Claude"])
+    }
+
+    func testReturnsNilForUnrecognizedMCPListJSON() {
+        XCTAssertNil(
+            MCPOutputParser.parseMCPList(fromJSON: Data("[]".utf8))
+        )
+        XCTAssertNil(
+            MCPOutputParser.parseMCPList(fromJSON: Data("not json".utf8))
+        )
+    }
+
     func testReturnsNilForUnrecognizedMCPListOutput() {
         XCTAssertNil(MCPOutputParser.parseMCPList("some unexpected error"))
         XCTAssertNil(MCPOutputParser.parseMCPList(""))
@@ -197,6 +217,7 @@ final class MCPOutputParserTests: XCTestCase {
             baseline: ["fe-api-gen": "v10", "fe-td-generator": "v11"]
         )
         let runner = RoutingDoctorRunner(
+            mcpListJSON: mcpListJSON,
             mcpListOutput: mcpListOutput,
             skillListOutput: skillListJSON
         )
@@ -213,6 +234,10 @@ final class MCPOutputParserTests: XCTestCase {
             report.mcpConfiguration?.mcpSummary?.skynetBaseIDEs,
             ["Cursor"]
         )
+        XCTAssertEqual(
+            report.mcpConfiguration?.mcpSummary?.ideGroups,
+            ["Cursor": 3, "Codex": 2]
+        )
         XCTAssertEqual(report.mcpConfiguration?.skillCount, 3)
         XCTAssertEqual(
             report.mcpConfiguration?.outdatedSkills,
@@ -220,6 +245,48 @@ final class MCPOutputParserTests: XCTestCase {
                 OutdatedSkill(name: "fe-td-generator", installedVersion: nil, expectedVersion: "v11"),
             ]
         )
+    }
+
+    func testDoctorFallsBackToTextMCPListWhenJSONUnavailable() async throws {
+        let runner = RoutingDoctorRunner(
+            mcpListJSON: nil,
+            mcpListOutput: mcpListOutput,
+            skillListOutput: skillListJSON
+        )
+        let doctor = EnvironmentDoctor(
+            locator: DoctorStubLocator(url: URL(fileURLWithPath: "/fake/bin/skynet")),
+            checker: DoctorStubChecker(version: "2.7.29"),
+            runner: runner,
+            skillLockURL: nil
+        )
+
+        let report = await doctor.inspect(networkAvailable: true)
+
+        XCTAssertEqual(
+            report.mcpConfiguration?.mcpSummary?.total,
+            5
+        )
+        XCTAssertEqual(
+            report.mcpConfiguration?.mcpSummary?.skynetBaseIDEs,
+            ["Cursor"]
+        )
+    }
+
+    private var mcpListJSON: String {
+        #"""
+        {
+          "Cursor": [
+            {"name": "skynet-base", "version": "v2.11.5"},
+            {"name": "skynet-bank-fe-flow", "version": "v0.8.9"},
+            {"name": "drawio", "version": "vlatest"}
+          ],
+          "Claude": [],
+          "Codex": [
+            {"name": "Filesystem", "version": "vlatest"},
+            {"name": "gitlab-mcp", "version": ""}
+          ]
+        }
+        """#
     }
 
     private var skillListJSON: String {
@@ -252,10 +319,16 @@ final class MCPOutputParserTests: XCTestCase {
 // Probes run concurrently inside EnvironmentDoctor, so this runner routes
 // by command instead of consuming an ordered queue.
 private actor RoutingDoctorRunner: CommandRunning {
+    private let mcpListJSON: String?
     private let mcpListOutput: String
     private let skillListOutput: String
 
-    init(mcpListOutput: String, skillListOutput: String) {
+    init(
+        mcpListJSON: String?,
+        mcpListOutput: String,
+        skillListOutput: String
+    ) {
+        self.mcpListJSON = mcpListJSON
         self.mcpListOutput = mcpListOutput
         self.skillListOutput = skillListOutput
     }
@@ -266,14 +339,20 @@ private actor RoutingDoctorRunner: CommandRunning {
         environment: [String: String],
         timeout: Duration
     ) async -> CommandResult {
-        let command = arguments.joined(separator: " ")
-        if command.contains("node --version") {
+        if arguments.contains("node") && arguments.contains("--version") {
             return .succeeded(stdout: "v22.23.2\n")
         }
-        if command.contains("command -v skynet-base") {
+        if arguments.contains("command") && arguments.contains("-v") {
             return .succeeded(stdout: "/opt/homebrew/bin/skynet-base\n")
         }
         if arguments.contains("mcp") {
+            let wantsJSON = arguments.contains("-j") || arguments.contains("--json")
+            if wantsJSON {
+                guard let mcpListJSON else {
+                    return .failed()
+                }
+                return .succeeded(stdout: mcpListJSON + "\n")
+            }
             return .succeeded(stdout: mcpListOutput + "\n")
         }
         if arguments.contains("skill") {
