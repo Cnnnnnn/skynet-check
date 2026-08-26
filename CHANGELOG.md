@@ -5,6 +5,12 @@ follow the newest `v*` git tag; the build number is the commit count.
 
 ## [Unreleased]
 
+### Fixed
+
+- Menu bar panel content scrolls when expanded cards exceed the visible
+  display height (previously grew off-screen with no way to reach the
+  bottom).
+
 ### Changed
 
 - MCP version checks now read Cursor (`~/.cursor/mcp.json`) and Codex
