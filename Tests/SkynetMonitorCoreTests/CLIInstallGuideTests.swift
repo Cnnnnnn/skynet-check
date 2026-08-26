@@ -61,7 +61,7 @@ final class CLIInstallGuideTests: XCTestCase {
         XCTAssertFalse(command?.contains("skynet mcp install") == true)
     }
 
-    func testSkynetPrefixedServerUsesBareInstallName() {
+    func testSkynetPrefixedServerUsesNpmInstall() {
         let finding = McpVersionFinding(
             serverName: "skynet-bank-fe-flow",
             packageName: "@shopee/skynet.bank-fe-flow",
@@ -72,11 +72,11 @@ final class CLIInstallGuideTests: XCTestCase {
 
         XCTAssertEqual(
             CLIInstallGuide.mcpUpgradeCommand(for: finding),
-            "skynet mcp install 'bank-fe-flow'"
+            "npm install -g @shopee/skynet.bank-fe-flow@0.9.0 --registry https://npm.shopee.io"
         )
     }
 
-    func testSkynetBaseUsesUpdateToolsWhenCommandIsBareName() {
+    func testSkynetBaseUsesNpmWhenCommandIsBareName() {
         let finding = McpVersionFinding(
             serverName: "skynet-base",
             packageName: "@shopee/skynet-base",
@@ -88,7 +88,7 @@ final class CLIInstallGuideTests: XCTestCase {
 
         XCTAssertEqual(
             CLIInstallGuide.mcpUpgradeCommand(for: finding),
-            "skynet update tools"
+            "npm install -g @shopee/skynet-base@2.12.3 --registry https://npm.shopee.io"
         )
     }
 
@@ -104,7 +104,34 @@ final class CLIInstallGuideTests: XCTestCase {
 
         XCTAssertEqual(
             CLIInstallGuide.mcpUpgradeCommand(for: finding),
-            "/Users/me/.nvm/versions/node/v22.22.3/bin/npm install -g @shopee/skynet-base@2.12.3 --registry https://npm.shopee.io"
+            [
+                "/Users/me/.nvm/versions/node/v22.22.3/bin/npm",
+                "install -g @shopee/skynet-base@2.12.3",
+                "--registry https://npm.shopee.io",
+                "--prefix '/Users/me/.nvm/versions/node/v22.22.3'",
+            ].joined(separator: " ")
+        )
+    }
+
+    func testPlanAndGenFastPinnedPathUsesThatNodesNpm() {
+        let finding = McpVersionFinding(
+            serverName: "skynet-plan-and-gen-fast",
+            packageName: "@shopee/skynet.plan-and-gen-fast",
+            installedVersion: "0.4.6",
+            latestVersion: "0.4.8",
+            configSource: "Cursor",
+            configuredCommand: "/Users/me/.nvm/versions/node/v22.23.2/bin/skynet.plan-and-gen",
+            configuredBinaryMissing: true
+        )
+
+        XCTAssertEqual(
+            CLIInstallGuide.mcpUpgradeCommand(for: finding),
+            [
+                "/Users/me/.nvm/versions/node/v22.23.2/bin/npm",
+                "install -g @shopee/skynet.plan-and-gen-fast@0.4.8",
+                "--registry https://npm.shopee.io",
+                "--prefix '/Users/me/.nvm/versions/node/v22.23.2'",
+            ].joined(separator: " ")
         )
     }
 }

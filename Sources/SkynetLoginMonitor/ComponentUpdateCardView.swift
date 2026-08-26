@@ -222,21 +222,28 @@ struct ComponentUpdateCardView: View {
     // Generated command rewrites IDE configs via `skynet mcp install`.
     private func mcpRow(_ finding: McpVersionFinding) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
+            HStack(alignment: .top, spacing: 6) {
                 Image(
                     systemName: finding.isUpgradable
                         ? "arrow.up.circle.fill" : "checkmark.circle"
                 )
                 .foregroundStyle(finding.isUpgradable ? .orange : .green)
                 .accessibilityHidden(true)
-                Text("\(finding.serverName)（\(finding.configSource)）")
-                    .font(.caption)
-                    .lineLimit(1)
-                Spacer()
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(finding.serverName)
+                        .font(.caption)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(finding.configSource)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                Spacer(minLength: 6)
                 Text(mcpDetail(finding))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .multilineTextAlignment(.trailing)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if finding.isUpgradable {
                 McpUpgradeCommandRow(finding: finding)
@@ -248,6 +255,18 @@ struct ComponentUpdateCardView: View {
         if finding.unpinned {
             return MonitorText.ComponentUpdate.unpinnedDetail
         }
+        if finding.configuredBinaryMissing {
+            let node = pinnedNodeHint(finding).map { "node \($0)" } ?? "配置路径"
+            if let installed = finding.installedVersion,
+               let latest = finding.latestVersion
+            {
+                return "\(node) 缺失 · \(installed) → \(latest)"
+            }
+            if let latest = finding.latestVersion {
+                return "\(node) 缺失 · 安装 \(latest)"
+            }
+            return "\(node) 缺失"
+        }
         guard let installed = finding.installedVersion else {
             return MonitorText.ComponentUpdate.unavailableDetail
         }
@@ -255,9 +274,6 @@ struct ComponentUpdateCardView: View {
             return "\(installed) · \(MonitorText.ComponentUpdate.unavailableDetail)"
         }
         if finding.isUpgradable {
-            if let node = pinnedNodeHint(finding) {
-                return "\(installed) → \(latest) · node \(node)"
-            }
             return "\(installed) → \(latest)"
         }
         return "\(installed) \(MonitorText.UpdateCheck.upToDate)"

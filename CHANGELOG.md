@@ -13,10 +13,11 @@ follow the newest `v*` git tag; the build number is the commit count.
   left, status like "6 个 MCP 可升级" on the right; orange tint only when
   upgrades exist.
 - Each upgradable MCP row offers a copyable Terminal command: pinned
-  npx packages bump `package@old` in the IDE config; platform MCPs use
-  `skynet mcp install '<name>'`; `skynet-base` with an absolute nvm path
-  uses that node's `npm install -g` (Cursor often pins a different Node
-  than the active shell). Pinned Node versions show in the detail line.
+  npx packages bump `package@old` in the IDE config; resolved npm
+  packages use `npm install -g` (absolute Cursor nvm paths use that
+  node's npm — `skynet mcp install` often no-ops or hits pending builds).
+  Missing configured binaries are called out instead of a misleading
+  "node vX" badge beside a PATH-fallback version.
 
 ## [0.9.0] - 2026-08-26
 

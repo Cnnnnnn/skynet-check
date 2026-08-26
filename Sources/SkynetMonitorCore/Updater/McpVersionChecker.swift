@@ -80,6 +80,9 @@ public struct McpVersionFinding: Codable, Equatable, Sendable {
     // command from the IDE config; Cursor often pins an absolute nvm path
     // that differs from the shell's active `nvm use`.
     public let configuredCommand: String?
+    // Absolute command path in the config that is not on disk (stale nvm
+    // pin). Version may still come from a PATH fallback elsewhere.
+    public let configuredBinaryMissing: Bool
 
     public init(
         serverName: String,
@@ -89,7 +92,8 @@ public struct McpVersionFinding: Codable, Equatable, Sendable {
         unpinned: Bool = false,
         isNPXPinned: Bool = false,
         configSource: String = "Cursor",
-        configuredCommand: String? = nil
+        configuredCommand: String? = nil,
+        configuredBinaryMissing: Bool = false
     ) {
         self.serverName = serverName
         self.packageName = packageName
@@ -99,9 +103,15 @@ public struct McpVersionFinding: Codable, Equatable, Sendable {
         self.isNPXPinned = isNPXPinned
         self.configSource = configSource
         self.configuredCommand = configuredCommand
+        self.configuredBinaryMissing = configuredBinaryMissing
     }
 
+    // Treat a missing configured binary as needing an upgrade even when a
+    // PATH fallback happens to already match latest — the IDE won't start it.
     public var isUpgradable: Bool {
+        if configuredBinaryMissing {
+            return latestVersion != nil || packageName != nil
+        }
         guard let installedVersion,
               let latestVersion,
               let installed = SemanticVersion(installedVersion),
@@ -453,6 +463,8 @@ public actor McpVersionChecker: McpVersionChecking {
         command: String,
         source: String
     ) async -> McpVersionFinding {
+        let binaryMissing = entry.command.contains("/")
+            && !fileManager.fileExists(atPath: entry.command)
         var directory = (command as NSString).deletingLastPathComponent
         let binaryName = (command as NSString).lastPathComponent
         if !fileManager.fileExists(atPath: command) {
@@ -463,7 +475,8 @@ public actor McpVersionChecker: McpVersionChecking {
                 return McpVersionFinding(
                     serverName: entry.name,
                     configSource: source,
-                    configuredCommand: entry.command
+                    configuredCommand: entry.command,
+                    configuredBinaryMissing: binaryMissing
                 )
             }
             directory = (resolved as NSString).deletingLastPathComponent
@@ -476,7 +489,8 @@ public actor McpVersionChecker: McpVersionChecking {
             return McpVersionFinding(
                 serverName: entry.name,
                 configSource: source,
-                configuredCommand: entry.command
+                configuredCommand: entry.command,
+                configuredBinaryMissing: binaryMissing
             )
         }
         return McpVersionFinding(
@@ -485,7 +499,8 @@ public actor McpVersionChecker: McpVersionChecking {
             installedVersion: package.version,
             latestVersion: await registry.latestVersion(of: package.name),
             configSource: source,
-            configuredCommand: entry.command
+            configuredCommand: entry.command,
+            configuredBinaryMissing: binaryMissing
         )
     }
 }

@@ -19,27 +19,16 @@ public enum CLIInstallGuide {
     }
 
     // Upgrade command the user can paste into Terminal.
-    // - skynet-base with an absolute command path: install into THAT nvm
-    //   prefix (Cursor often pins v22.22.3 while `nvm use 22` is v22.23.2).
-    //   Otherwise `skynet update tools` only refreshes the active shell node.
-    // - Other platform MCPs: bare `skynet mcp install 'foo'`.
-    // - Plain npx pins: bump package@old in the IDE config.
+    // - npx pins: bump package@old in the IDE config.
+    // - Resolved npm packages (skynet-base, plan-and-gen-fast, …):
+    //   `npm install -g pkg@ver`. Absolute Cursor paths use THAT node's npm
+    //   (`skynet mcp install` no-ops when already configured / pending build).
+    // - Otherwise: bare `skynet mcp install 'name'`.
     public static func mcpUpgradeCommand(
         for finding: McpVersionFinding
     ) -> String? {
         guard finding.isUpgradable else {
             return nil
-        }
-
-        if finding.serverName == "skynet-base"
-            || finding.packageName == "@shopee/skynet-base"
-        {
-            if let npm = npmForPinnedBinary(finding.configuredCommand),
-               let latest = finding.latestVersion
-            {
-                return "\(npm) install -g @shopee/skynet-base@\(latest) --registry \(SkynetEndpoints.npmRegistryBase)"
-            }
-            return mcpRepairCommand
         }
 
         if finding.isNPXPinned,
@@ -57,6 +46,20 @@ public enum CLIInstallGuide {
             )
         }
 
+        if let package = finding.packageName,
+           let latest = finding.latestVersion
+        {
+            return mcpNpmInstallCommand(
+                package: package,
+                version: latest,
+                configuredCommand: finding.configuredCommand
+            )
+        }
+
+        if finding.serverName == "skynet-base" {
+            return mcpRepairCommand
+        }
+
         let installName = skynetInstallName(fromServerName: finding.serverName)
         return "\(mcpInstallCommand) \(shellSingleQuoted(installName))"
     }
@@ -69,9 +72,11 @@ public enum CLIInstallGuide {
         var seen = Set<String>()
         var commands: [String] = []
         for finding in findings {
+            let packageKey = finding.packageName
+                ?? skynetInstallName(fromServerName: finding.serverName)
             let key = finding.isNPXPinned
-                ? "pin:\(finding.configSource):\(finding.packageName ?? finding.serverName)"
-                : "mcp:\(finding.configSource):\(skynetInstallName(fromServerName: finding.serverName)):\(finding.configuredCommand ?? "")"
+                ? "pin:\(finding.configSource):\(packageKey)"
+                : "mcp:\(finding.configSource):\(packageKey):\(finding.configuredCommand ?? "")"
             guard seen.insert(key).inserted,
                   let command = mcpUpgradeCommand(for: finding)
             else {
@@ -85,19 +90,47 @@ public enum CLIInstallGuide {
         return commands.joined(separator: "\n\n")
     }
 
-    // Cursor pins e.g. ~/.nvm/versions/node/v22.22.3/bin/skynet-mcp — upgrade
-    // must use that node's npm, not whatever `nvm use` selected in the shell.
-    private static func npmForPinnedBinary(_ configuredCommand: String?) -> String? {
+    private static func mcpNpmInstallCommand(
+        package: String,
+        version: String,
+        configuredCommand: String?
+    ) -> String {
+        var parts: [String] = []
+        if let pinned = npmPrefix(forConfiguredCommand: configuredCommand) {
+            parts.append(pinned.npm)
+            parts.append("install -g \(package)@\(version)")
+            if package.hasPrefix("@shopee/") {
+                parts.append("--registry \(SkynetEndpoints.npmRegistryBase)")
+            }
+            // Some shells leave npm_config_prefix on an older nvm; force
+            // the install into the same prefix the IDE binary path uses.
+            parts.append("--prefix \(shellSingleQuoted(pinned.prefix))")
+        } else {
+            parts.append("npm install -g \(package)@\(version)")
+            if package.hasPrefix("@shopee/") {
+                parts.append("--registry \(SkynetEndpoints.npmRegistryBase)")
+            }
+        }
+        return parts.joined(separator: " ")
+    }
+
+    // Cursor pins e.g. ~/.nvm/versions/node/v22.23.2/bin/skynet-mcp — upgrade
+    // must use that node's npm AND --prefix, not whatever npm_config_prefix
+    // the shell inherited.
+    private static func npmPrefix(
+        forConfiguredCommand configuredCommand: String?
+    ) -> (npm: String, prefix: String)? {
         guard let configuredCommand,
               configuredCommand.contains("/")
         else {
             return nil
         }
-        let npm = URL(fileURLWithPath: configuredCommand)
+        let binDir = URL(fileURLWithPath: configuredCommand)
             .deletingLastPathComponent()
-            .appendingPathComponent("npm")
-            .path
-        return npm
+        return (
+            npm: binDir.appendingPathComponent("npm").path,
+            prefix: binDir.deletingLastPathComponent().path
+        )
     }
 
     // getMCPServerName prefixes non-HTTP installs with "skynet-"; the install
