@@ -47,9 +47,9 @@ struct SkynetLoginMonitorApp: App {
                 registry: HTTPNpmRegistryClient()
             ),
             componentUpdateStore: ComponentUpdateSnapshotStore(),
-            updateChecker: AppConfiguration.updateManifestURL.map {
-                HTTPAppUpdateChecker(manifestURL: $0)
-            },
+            // GitHub Releases are the update channel: the release workflow
+            // attaches a DMG to every v* tag.
+            updateChecker: GitHubReleaseUpdateChecker(),
             currentAppVersion: Bundle.main
                 .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         )

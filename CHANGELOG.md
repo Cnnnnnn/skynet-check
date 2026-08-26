@@ -7,6 +7,25 @@ follow the newest `v*` git tag; the build number is the commit count.
 
 ### Added
 
+- "检查更新" is live: the panel queries this project's GitHub Releases
+  (the release workflow attaches a DMG to every `v*` tag) and offers the
+  download when a newer version exists.
+
+### Changed
+
+- CI now installs swiftlint and fails on warnings (`--strict`), keeping
+  the local pre-commit bar and the pipeline identical.
+
+### Fixed
+
+- SemanticVersion now parses pre-release ("1.2.0-beta") and build
+  metadata ("+build.7") suffixes: a pre-release no longer compares as
+  newer than its own release, which previously masked upgrade prompts.
+- MCP configs that exist but cannot be read or parsed are logged with
+  their path instead of silently counting as "no servers configured".
+
+### Added
+
 - The first notification after a do-not-disturb window expires now
   carries a "已抑制 N 条通知" summary, so nothing silently vanished
   during the pause. An explicit resume clears silently.

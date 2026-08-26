@@ -126,10 +126,9 @@ installation commands, lets the user copy them, opens Terminal, and provides a
   triggers: 查询登录状态 (persisted snapshot, instant), 立即检查登录 (a
   real CLI probe) and 切换通知勿扰 (cycles the mute window). Build them
   in the Shortcuts app; macOS does not support Siri voice phrases.
-- **检查更新** compares the installed version against a team-hosted
-  manifest (`AppConfiguration.updateManifestURL`) and opens the DMG download
-  page when a newer release exists. Until the real manifest URL is configured,
-  the check reports a failure instead of a false result.
+- **检查更新** queries the project's GitHub Releases (the release workflow
+  attaches a DMG to every `v*` tag) and offers the DMG download when a
+  newer version exists.
 - **退出** stops monitoring and closes the app.
 
 The menu bar panel uses a compact native macOS window layout with a status

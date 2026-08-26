@@ -209,7 +209,7 @@ final class HTTPClientTests: XCTestCase {
     }
 }
 
-private final class StubURLProtocol: URLProtocol {
+final class StubURLProtocol: URLProtocol {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var _handler: (@Sendable (URLRequest) -> (Int, Data))?
 
