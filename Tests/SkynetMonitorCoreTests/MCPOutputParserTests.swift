@@ -154,7 +154,7 @@ final class MCPOutputParserTests: XCTestCase {
         let skillRow = report.checks.first { $0.name == "Skills" }
 
         XCTAssertEqual(skillRow?.status, .warning)
-        XCTAssertEqual(skillRow?.detail, "167 个已安装，1 个落后于基线")
+        XCTAssertEqual(skillRow?.detail, "167 个已安装，1 个落后于团队 lock")
     }
 
     func testMCPRowsReportMissingCoreMCPAsWarning() {

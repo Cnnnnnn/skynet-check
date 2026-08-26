@@ -18,6 +18,14 @@ public enum CLIInstallGuide {
         return "\(skillSyncCommand) \(specs.joined(separator: " "))"
     }
 
+    // Which pasteable upgrade path we chose — drives UI expectation copy.
+    public enum McpUpgradeStrategy: Equatable, Sendable {
+        case pinBump
+        case npmInstall(usesPinnedNode: Bool)
+        case skynetUpdateTools
+        case skynetMcpInstall
+    }
+
     // Upgrade command the user can paste into Terminal.
     // - npx pins: bump package@old in the IDE config.
     // - Resolved npm packages (skynet-base, plan-and-gen-fast, …):
@@ -27,15 +35,17 @@ public enum CLIInstallGuide {
     public static func mcpUpgradeCommand(
         for finding: McpVersionFinding
     ) -> String? {
-        guard finding.isUpgradable else {
+        guard let strategy = mcpUpgradeStrategy(for: finding) else {
             return nil
         }
-
-        if finding.isNPXPinned,
-           let package = finding.packageName,
-           let from = finding.installedVersion,
-           let to = finding.latestVersion
-        {
+        switch strategy {
+        case .pinBump:
+            guard let package = finding.packageName,
+                  let from = finding.installedVersion,
+                  let to = finding.latestVersion
+            else {
+                return nil
+            }
             return mcpPinBumpCommand(
                 package: package,
                 from: from,
@@ -44,24 +54,116 @@ public enum CLIInstallGuide {
                     ? SkynetEndpoints.codexConfigPath
                     : SkynetEndpoints.cursorConfigPath
             )
-        }
-
-        if let package = finding.packageName,
-           let latest = finding.latestVersion
-        {
+        case .npmInstall:
+            guard let package = finding.packageName,
+                  let latest = finding.latestVersion
+            else {
+                return nil
+            }
             return mcpNpmInstallCommand(
                 package: package,
                 version: latest,
                 configuredCommand: finding.configuredCommand
             )
+        case .skynetUpdateTools:
+            return mcpRepairCommand
+        case .skynetMcpInstall:
+            let installName = skynetInstallName(fromServerName: finding.serverName)
+            return "\(mcpInstallCommand) \(shellSingleQuoted(installName))"
+        }
+    }
+
+    public static func mcpUpgradeStrategy(
+        for finding: McpVersionFinding
+    ) -> McpUpgradeStrategy? {
+        guard finding.isUpgradable else {
+            return nil
+        }
+
+        if finding.isNPXPinned,
+           finding.packageName != nil,
+           finding.installedVersion != nil,
+           finding.latestVersion != nil
+        {
+            return .pinBump
+        }
+
+        if finding.packageName != nil, finding.latestVersion != nil {
+            let pinned = npmPrefix(forConfiguredCommand: finding.configuredCommand) != nil
+            return .npmInstall(usesPinnedNode: pinned)
         }
 
         if finding.serverName == "skynet-base" {
-            return mcpRepairCommand
+            return .skynetUpdateTools
         }
 
-        let installName = skynetInstallName(fromServerName: finding.serverName)
-        return "\(mcpInstallCommand) \(shellSingleQuoted(installName))"
+        return .skynetMcpInstall
+    }
+
+    public static func mcpUpgradeExpectation(
+        for finding: McpVersionFinding
+    ) -> String? {
+        guard let strategy = mcpUpgradeStrategy(for: finding) else {
+            return nil
+        }
+        switch strategy {
+        case .pinBump:
+            return MonitorText.ComponentUpdate.upgradeExpectPin
+        case .npmInstall(let usesPinnedNode):
+            return usesPinnedNode
+                ? MonitorText.ComponentUpdate.upgradeExpectNpmPinned
+                : MonitorText.ComponentUpdate.upgradeExpectNpm
+        case .skynetUpdateTools:
+            return MonitorText.ComponentUpdate.upgradeExpectUpdateTools
+        case .skynetMcpInstall:
+            return MonitorText.ComponentUpdate.upgradeExpectSkynetInstall
+        }
+    }
+
+    // Rewrite absolute nvm node dirs in the IDE config so they match the
+    // login-shell node (Cursor often freezes an older nvm path).
+    public static func mcpRetargetNvmCommand(
+        for finding: McpVersionFinding
+    ) -> String? {
+        guard let from = finding.configuredNvmNode,
+              let to = finding.pathNvmNode,
+              from != to
+        else {
+            return nil
+        }
+        let configPath = finding.configSource == "Codex"
+            ? SkynetEndpoints.codexConfigPath
+            : SkynetEndpoints.cursorConfigPath
+        let old = "/.nvm/versions/node/\(from)/"
+        let new = "/.nvm/versions/node/\(to)/"
+        return [
+            "python3 <<'PY'",
+            "from pathlib import Path",
+            "path = Path.home() / \"\(configPath)\"",
+            "old = \"\(old)\"",
+            "new = \"\(new)\"",
+            "text = path.read_text()",
+            "if old not in text:",
+            "    raise SystemExit(f\"nvm path not found in {path}: {old}\")",
+            "path.write_text(text.replace(old, new))",
+            "print(f\"updated {path}: {old} → {new}\")",
+            "PY",
+        ].joined(separator: "\n")
+    }
+
+    // One row per (IDE, from→to); many servers share the same frozen node.
+    public static func mcpRetargetNvmFindings(
+        from findings: [McpVersionFinding]
+    ) -> [McpVersionFinding] {
+        var seen = Set<String>()
+        return findings.filter { finding in
+            guard let from = finding.configuredNvmNode,
+                  let to = finding.pathNvmNode
+            else {
+                return false
+            }
+            return seen.insert("\(finding.configSource):\(from):\(to)").inserted
+        }
     }
 
     // One command per distinct upgrade target (Cursor/Codex duplicates of

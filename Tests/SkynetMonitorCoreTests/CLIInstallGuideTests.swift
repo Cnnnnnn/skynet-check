@@ -134,4 +134,140 @@ final class CLIInstallGuideTests: XCTestCase {
             ].joined(separator: " ")
         )
     }
+
+    func testUpgradeStrategyAndExpectationMatchCommandPaths() {
+        let pin = McpVersionFinding(
+            serverName: "Banking FE MCP",
+            packageName: "@shopee/banking-fe-mcp",
+            installedVersion: "0.2.27",
+            latestVersion: "0.2.29",
+            isNPXPinned: true,
+            configSource: "Codex"
+        )
+        XCTAssertEqual(CLIInstallGuide.mcpUpgradeStrategy(for: pin), .pinBump)
+        XCTAssertEqual(
+            CLIInstallGuide.mcpUpgradeExpectation(for: pin),
+            MonitorText.ComponentUpdate.upgradeExpectPin
+        )
+
+        let bareNpm = McpVersionFinding(
+            serverName: "skynet-bank-fe-flow",
+            packageName: "@shopee/skynet.bank-fe-flow",
+            installedVersion: "0.8.9",
+            latestVersion: "0.9.0",
+            configSource: "Cursor"
+        )
+        XCTAssertEqual(
+            CLIInstallGuide.mcpUpgradeStrategy(for: bareNpm),
+            .npmInstall(usesPinnedNode: false)
+        )
+        XCTAssertEqual(
+            CLIInstallGuide.mcpUpgradeExpectation(for: bareNpm),
+            MonitorText.ComponentUpdate.upgradeExpectNpm
+        )
+
+        let pinnedNpm = McpVersionFinding(
+            serverName: "skynet-base",
+            packageName: "@shopee/skynet-base",
+            installedVersion: "2.9.1",
+            latestVersion: "2.12.3",
+            configSource: "Cursor",
+            configuredCommand: "/Users/me/.nvm/versions/node/v22.22.3/bin/skynet-mcp"
+        )
+        XCTAssertEqual(
+            CLIInstallGuide.mcpUpgradeStrategy(for: pinnedNpm),
+            .npmInstall(usesPinnedNode: true)
+        )
+        XCTAssertEqual(
+            CLIInstallGuide.mcpUpgradeExpectation(for: pinnedNpm),
+            MonitorText.ComponentUpdate.upgradeExpectNpmPinned
+        )
+
+        let lastResort = McpVersionFinding(
+            serverName: "skynet-mystery",
+            installedVersion: "1.0.0",
+            latestVersion: "1.1.0",
+            configSource: "Cursor"
+        )
+        XCTAssertEqual(
+            CLIInstallGuide.mcpUpgradeStrategy(for: lastResort),
+            .skynetMcpInstall
+        )
+        XCTAssertEqual(
+            CLIInstallGuide.mcpUpgradeExpectation(for: lastResort),
+            MonitorText.ComponentUpdate.upgradeExpectSkynetInstall
+        )
+
+        let updateTools = McpVersionFinding(
+            serverName: "skynet-base",
+            installedVersion: "2.9.1",
+            latestVersion: "2.12.3",
+            configSource: "Codex"
+        )
+        XCTAssertEqual(
+            CLIInstallGuide.mcpUpgradeStrategy(for: updateTools),
+            .skynetUpdateTools
+        )
+        XCTAssertEqual(
+            CLIInstallGuide.mcpUpgradeExpectation(for: updateTools),
+            MonitorText.ComponentUpdate.upgradeExpectUpdateTools
+        )
+    }
+
+    func testNvmPathParsesNodeVersion() {
+        XCTAssertEqual(
+            NvmPaths.nodeVersion(
+                inPath: "/Users/me/.nvm/versions/node/v22.23.2/bin/node"
+            ),
+            "v22.23.2"
+        )
+        XCTAssertNil(NvmPaths.nodeVersion(inPath: "/usr/local/bin/node"))
+    }
+
+    func testFindingDerivesConfiguredNvmAndMismatch() {
+        let matched = McpVersionFinding(
+            serverName: "skynet-base",
+            configuredCommand: "/Users/me/.nvm/versions/node/v22.23.2/bin/skynet-mcp",
+            pathNvmNode: "v22.23.2"
+        )
+        XCTAssertEqual(matched.configuredNvmNode, "v22.23.2")
+        XCTAssertNil(matched.pathNvmNode)
+        XCTAssertFalse(matched.hasNvmNodeMismatch)
+
+        let mismatched = matched.annotating(pathNvmNode: "v22.22.3")
+        XCTAssertEqual(mismatched.pathNvmNode, "v22.22.3")
+        XCTAssertTrue(mismatched.hasNvmNodeMismatch)
+    }
+
+    func testRetargetNvmCommandRewritesFrozenPath() {
+        let finding = McpVersionFinding(
+            serverName: "skynet-base",
+            configSource: "Cursor",
+            configuredCommand: "/Users/me/.nvm/versions/node/v22.22.3/bin/skynet-mcp",
+            pathNvmNode: "v22.23.2"
+        )
+
+        let command = CLIInstallGuide.mcpRetargetNvmCommand(for: finding)
+
+        XCTAssertEqual(
+            command,
+            """
+            python3 <<'PY'
+            from pathlib import Path
+            path = Path.home() / ".cursor/mcp.json"
+            old = "/.nvm/versions/node/v22.22.3/"
+            new = "/.nvm/versions/node/v22.23.2/"
+            text = path.read_text()
+            if old not in text:
+                raise SystemExit(f"nvm path not found in {path}: {old}")
+            path.write_text(text.replace(old, new))
+            print(f"updated {path}: {old} → {new}")
+            PY
+            """
+        )
+        XCTAssertEqual(
+            CLIInstallGuide.mcpRetargetNvmFindings(from: [finding, finding]).count,
+            1
+        )
+    }
 }

@@ -9,6 +9,7 @@ struct UpgradeActionRow: View {
     let primaryCommand: String
     var fallbackLabel: String?
     var fallbackCommand: String?
+    var expectation: String?
 
     @State private var commandCopied = false
 
@@ -45,6 +46,12 @@ struct UpgradeActionRow: View {
                     .buttonStyle(.borderless)
                     .font(.caption)
                 }
+            }
+            if let expectation {
+                Text(expectation)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

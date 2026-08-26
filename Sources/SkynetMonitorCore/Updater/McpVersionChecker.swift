@@ -65,6 +65,18 @@ public enum McpServerPlan: Equatable, Sendable {
     }
 }
 
+// ".../.nvm/versions/node/v22.23.2/bin/skynet-mcp" → "v22.23.2"
+public enum NvmPaths {
+    public static func nodeVersion(inPath path: String) -> String? {
+        let marker = "/.nvm/versions/node/"
+        guard let range = path.range(of: marker) else {
+            return nil
+        }
+        let version = path[range.upperBound...].prefix(while: { $0 != "/" })
+        return version.isEmpty ? nil : String(version)
+    }
+}
+
 public struct McpVersionFinding: Codable, Equatable, Sendable {
     public let serverName: String
     public let packageName: String?
@@ -83,6 +95,11 @@ public struct McpVersionFinding: Codable, Equatable, Sendable {
     // Absolute command path in the config that is not on disk (stale nvm
     // pin). Version may still come from a PATH fallback elsewhere.
     public let configuredBinaryMissing: Bool
+    // nvm version baked into configuredCommand, when absolute.
+    public let configuredNvmNode: String?
+    // Login-shell `command -v node` nvm version when it differs from
+    // configuredNvmNode — upgrading with a bare npm then misses the IDE.
+    public let pathNvmNode: String?
 
     public init(
         serverName: String,
@@ -93,7 +110,9 @@ public struct McpVersionFinding: Codable, Equatable, Sendable {
         isNPXPinned: Bool = false,
         configSource: String = "Cursor",
         configuredCommand: String? = nil,
-        configuredBinaryMissing: Bool = false
+        configuredBinaryMissing: Bool = false,
+        configuredNvmNode: String? = nil,
+        pathNvmNode: String? = nil
     ) {
         self.serverName = serverName
         self.packageName = packageName
@@ -104,6 +123,16 @@ public struct McpVersionFinding: Codable, Equatable, Sendable {
         self.configSource = configSource
         self.configuredCommand = configuredCommand
         self.configuredBinaryMissing = configuredBinaryMissing
+        let configuredNode = configuredNvmNode
+            ?? configuredCommand.flatMap(NvmPaths.nodeVersion(inPath:))
+        self.configuredNvmNode = configuredNode
+        self.pathNvmNode = (configuredNode != nil && pathNvmNode != configuredNode)
+            ? pathNvmNode
+            : nil
+    }
+
+    public var hasNvmNodeMismatch: Bool {
+        pathNvmNode != nil
     }
 
     // Treat a missing configured binary as needing an upgrade even when a
@@ -120,6 +149,22 @@ public struct McpVersionFinding: Codable, Equatable, Sendable {
             return false
         }
         return latest > installed
+    }
+
+    func annotating(pathNvmNode: String?) -> McpVersionFinding {
+        McpVersionFinding(
+            serverName: serverName,
+            packageName: packageName,
+            installedVersion: installedVersion,
+            latestVersion: latestVersion,
+            unpinned: unpinned,
+            isNPXPinned: isNPXPinned,
+            configSource: configSource,
+            configuredCommand: configuredCommand,
+            configuredBinaryMissing: configuredBinaryMissing,
+            configuredNvmNode: configuredNvmNode,
+            pathNvmNode: pathNvmNode
+        )
     }
 }
 
@@ -287,26 +332,29 @@ public protocol McpVersionChecking: Sendable {
 }
 
 // Detection only: the findings name the installed and latest versions; the
-// upgrade itself is `skynet mcp install name@vX` (see CLIInstallGuide).
+// upgrade itself is pasteable Terminal text (see CLIInstallGuide).
 public actor McpVersionChecker: McpVersionChecking {
     private let cursorConfigURL: URL?
     private let codexConfigURL: URL?
     private let registry: any NpmRegistryLatestFetching
     private let binarySearchPaths: [String]
     private let fileManager: FileManager
+    private let runner: (any CommandRunning)?
 
     public init(
         cursorConfigURL: URL? = SkynetEndpoints.cursorConfigURL,
         codexConfigURL: URL? = SkynetEndpoints.codexConfigURL,
         registry: any NpmRegistryLatestFetching,
         binarySearchPaths: [String]? = nil,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        runner: (any CommandRunning)? = nil
     ) {
         self.cursorConfigURL = cursorConfigURL
         self.codexConfigURL = codexConfigURL
         self.registry = registry
         self.fileManager = fileManager
         self.binarySearchPaths = binarySearchPaths ?? Self.defaultBinarySearchPaths()
+        self.runner = runner
     }
 
     // MCP configs often reference binaries through bare names or nvm paths;
@@ -342,13 +390,16 @@ public actor McpVersionChecker: McpVersionChecking {
             return []
         }
 
+        let pathNvmNode = await resolvePathNvmNode()
+
         return await withTaskGroup(of: McpVersionFinding.self) { group in
             for sourced in sourcedEntries {
                 group.addTask {
-                    await self.finding(
+                    let finding = await self.finding(
                         for: sourced.entry,
                         source: sourced.source
                     )
+                    return finding.annotating(pathNvmNode: pathNvmNode)
                 }
             }
             var findings: [McpVersionFinding] = []
@@ -360,6 +411,16 @@ public actor McpVersionChecker: McpVersionChecking {
                     < ($1.serverName, $1.configSource)
             }
         }
+    }
+
+    // Login-shell node: Finder-launched apps lack nvm on PATH.
+    private func resolvePathNvmNode() async -> String? {
+        guard let runner else {
+            return nil
+        }
+        let path = await LoginShellResolver(runner: runner)
+            .resolve(command: "command -v node")
+        return path.flatMap(NvmPaths.nodeVersion(inPath:))
     }
 
     private func appendCursorEntries(

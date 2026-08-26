@@ -55,7 +55,7 @@ public enum MonitorText {
             "会话预计过期：\(stamp)（估算已过，以 CLI 状态为准）"
         }
         public static let diagnosticsOutlived = "会话预计过期：已超过历史最短估算（以 CLI 状态为准）"
-        public static let scopeCaption = "仅监控本地 CLI，与网页登录无关"
+        public static let scopeCaption = "仅监控本地 CLI，与网页登录无关 · 过期时间为历史估算"
     }
 
     public enum NotificationAction {
@@ -133,7 +133,7 @@ public enum MonitorText {
             "\(count) 个已安装"
         }
         public static func skillOutdated(total: Int, outdated: Int) -> String {
-            "\(total) 个已安装，\(outdated) 个落后于基线"
+            "\(total) 个已安装，\(outdated) 个落后于团队 lock"
         }
     }
 
@@ -164,7 +164,11 @@ public enum MonitorText {
         public static let needsLogin = "登录后可检测 Skill 更新"
         public static let failed = "组件版本检测失败，可点“重新检查”重试"
         public static let skillSection = "Skill"
+        // Installed = skill list (or lock fallback); latest = platform main.
+        // Environment Doctor separately compares skill list vs team lock.
+        public static let skillSectionCaption = "已安装 vs 平台最新"
         public static let mcpSection = "MCP"
+        public static let mcpSectionCaption = "IDE 实际启动配置"
         public static func skillAllCurrent(_ total: Int) -> String {
             "\(total) 个已检查，均为最新"
         }
@@ -198,6 +202,28 @@ public enum MonitorText {
         public static let copyUpgradeCommand = "复制升级命令"
         public static let copyAllUpgradeCommands = "复制全部升级命令"
         public static let openTerminalUpgrade = "Terminal 升级"
+        // What “success” / common failure looks like for each upgrade path.
+        public static let upgradeExpectPin =
+            "成功会打印 updated …；改完后在对应 IDE 重载 MCP，再点重新检查。"
+        public static let upgradeExpectNpmPinned =
+            "装到配置里的 Node（不是当前 shell 的 nvm）；完成后点重新检查。"
+        public static let upgradeExpectNpm =
+            "装到当前 PATH 的 npm；若 IDE 写死了别的 nvm 路径，仍可能读旧二进制。完成后点重新检查。"
+        public static let upgradeExpectUpdateTools =
+            "刷新 Skynet 工具链；对已配置 MCP 有时无效。完成后点重新检查。"
+        public static let upgradeExpectSkynetInstall =
+            "适合首次安装。已配置时常无改动；带版本号易遇平台 pending。"
+        public static let upgradeExpectBulk =
+            "按顺序在 Terminal 执行；全部跑完后点重新检查。"
+        public static let copyRetargetNvm = "改配置到 PATH Node"
+        public static let upgradeExpectRetargetNvm =
+            "把配置里冻结的 nvm 路径改成当前 PATH 的 Node；改完后重载 MCP，再点重新检查。"
+        public static func nvmMismatchDetail(
+            configured: String,
+            path: String
+        ) -> String {
+            "配置 \(configured) ≠ PATH \(path)"
+        }
         public static let updatesNotificationTitle = "Skynet 组件有可更新"
         public static func updatesNotificationBody(
             skillCount: Int,

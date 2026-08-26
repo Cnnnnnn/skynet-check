@@ -21,6 +21,18 @@ follow the newest `v*` git tag; the build number is the commit count.
 - Environment diagnosis now prefers `skynet mcp list -j` (falls back to
   the Chinese text parser on older CLIs), so MCP totals stay aligned with
   the CLI instead of fragile regex over layout.
+- Upgradable MCP rows show a short expectation under the command buttons
+  (pin rewrite / npm --prefix / bare npm / `skynet mcp install` last
+  resort), so common no-ops and pending-build failures are not a surprise.
+- Absolute Cursor/Codex nvm paths are compared to the login-shell
+  `command -v node`; a mismatch shows in the row detail and offers one
+  "改配置到 PATH Node" command per IDE (rewrites frozen nvm dirs).
+- Component Skill checks prefer `skynet skill list --json` for installed
+  versions (lock file is fallback), matching Environment Doctor's
+  inventory; captions clarify Skill = installed vs platform, Doctor =
+  installed vs team lock. README documents the session-token exception
+  used only for the platform Skill API, and that expiry remains a
+  heuristic until CLI grows `auth status --json` with expires.
 
 ## [0.9.0] - 2026-08-26
 

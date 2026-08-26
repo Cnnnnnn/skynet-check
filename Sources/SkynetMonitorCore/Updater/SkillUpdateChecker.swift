@@ -239,22 +239,29 @@ public actor HTTPSkynetPlatformClient: SkynetSkillVersionFetching {
     }
 }
 
-// Compares the local team lock baseline (the same file `skynet skill list`
-// reports from) against the platform's main versions. Only detection — the
-// upgrade command stays with the CLI.
+// Compares installed skill versions against the platform's main versions.
+// Installed prefers `skynet skill list --json` (same view as Environment
+// Doctor); falls back to the team lock file when the CLI probe is unavailable.
+// Upgrade itself stays with the CLI.
 public actor SkillUpdateChecker: SkillUpdateChecking {
     private let lockURL: URL
     private let client: any SkynetSkillVersionFetching
+    private let locator: (any CLIPathLocating)?
+    private let runner: (any CommandRunning)?
     private let maxConcurrent: Int
 
     public init(
         lockURL: URL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".agents/skills/skynet-skills-lock.json"),
         client: any SkynetSkillVersionFetching,
+        locator: (any CLIPathLocating)? = nil,
+        runner: (any CommandRunning)? = nil,
         maxConcurrent: Int = 6
     ) {
         self.lockURL = lockURL
         self.client = client
+        self.locator = locator
+        self.runner = runner
         self.maxConcurrent = max(1, maxConcurrent)
     }
 
@@ -262,8 +269,8 @@ public actor SkillUpdateChecker: SkillUpdateChecking {
         guard await client.sessionToken() != nil else {
             return .needsLogin
         }
-        guard let baseline = loadBaseline() else {
-            return .failed(reason: "无法读取 skill lock 文件")
+        guard let baseline = await loadInstalledVersions() else {
+            return .failed(reason: "无法读取已安装 Skills（CLI 或 lock）")
         }
         // Versions the comparator cannot parse carry no ordering, so they
         // cannot be judged outdated either way — skip instead of guessing.
@@ -271,7 +278,7 @@ public actor SkillUpdateChecker: SkillUpdateChecking {
             .filter { _, version in SemanticVersion(version) != nil }
             .sorted { $0.key < $1.key }
         guard !tracked.isEmpty else {
-            return .failed(reason: "lock 文件里没有可识别的版本")
+            return .failed(reason: "没有可识别版本的已安装 Skill")
         }
 
         // The list endpoint answers for ~every skill in a couple of pages;
@@ -323,7 +330,40 @@ public actor SkillUpdateChecker: SkillUpdateChecking {
         )
     }
 
-    private func loadBaseline() -> [String: String]? {
+    private func loadInstalledVersions() async -> [String: String]? {
+        if let fromCLI = await loadFromSkillList() {
+            return fromCLI
+        }
+        return loadLockBaseline()
+    }
+
+    private func loadFromSkillList() async -> [String: String]? {
+        guard let locator, let runner,
+              let cliURL = try? await locator.locate()
+        else {
+            return nil
+        }
+        let result = await runner.run(
+            executableURL: cliURL,
+            arguments: ["skill", "list", "--json"],
+            environment: CLIExecutionEnvironment.base(for: cliURL),
+            timeout: .seconds(8)
+        )
+        guard !result.timedOut, result.exitCode == 0,
+              let skills = SkillInventoryParser.parseInstalledSkills(
+                fromJSON: Data(result.stdout.utf8)
+              )
+        else {
+            return nil
+        }
+        var versions: [String: String] = [:]
+        for skill in skills where !skill.version.isEmpty {
+            versions[skill.name] = skill.version
+        }
+        return versions.isEmpty ? nil : versions
+    }
+
+    private func loadLockBaseline() -> [String: String]? {
         guard let data = try? Data(contentsOf: lockURL) else {
             return nil
         }

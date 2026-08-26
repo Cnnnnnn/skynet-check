@@ -41,10 +41,13 @@ struct SkynetLoginMonitorApp: App {
             tokenValidator: ConfluenceTokenValidator(),
             configReader: SkynetConfigReader(),
             skillUpdateChecker: SkillUpdateChecker(
-                client: HTTPSkynetPlatformClient()
+                client: HTTPSkynetPlatformClient(),
+                locator: locator,
+                runner: runner
             ),
             mcpVersionChecker: McpVersionChecker(
-                registry: HTTPNpmRegistryClient()
+                registry: HTTPNpmRegistryClient(),
+                runner: runner
             ),
             componentUpdateStore: ComponentUpdateSnapshotStore(),
             // GitHub Releases are the update channel: the release workflow

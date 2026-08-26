@@ -8,12 +8,21 @@ A personal macOS menu bar app that checks the local Skynet CLI login state and w
 - Xcode command-line tools with Swift 6
 - Skynet CLI available from the interactive zsh/NVM environment
 
-The app never reads `~/.skynet-cli/session.json` and never stores CLI output
-or token material. One exception by design: service tokens the Skynet CLI
-keeps in `~/.skynet-cli/tokens.json` (e.g. the Confluence token) can be
-copied from the panel on demand. Token values are masked on screen, never
-logged, never included in the diagnostics report, and never persisted by the
-app — the CLI's file remains the single source of truth.
+The app does not store CLI output or token material. Login checks go through
+`skynet auth status` only — the app never opens `~/.skynet-cli/session.json`
+for auth. One deliberate exception: Skill version checks read the session
+token from that file solely to call the platform Skill API (the token is
+never logged, never shown, and never persisted by the app). Another
+exception by design: service tokens the Skynet CLI keeps in
+`~/.skynet-cli/tokens.json` (e.g. the Confluence token) can be copied from
+the panel on demand. Token values are masked on screen, never logged, never
+included in the diagnostics report, and never persisted by the app — the
+CLI's file remains the single source of truth.
+
+Session expiry shown in the panel is a conservative estimate from past
+authenticated periods. The CLI does not yet expose `auth status --json`
+with an `expires` field; when it does, the adapter can switch without
+changing the UI.
 
 ## Build and run
 

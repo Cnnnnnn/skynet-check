@@ -1,6 +1,7 @@
 import Foundation
 
-// The Skynet CLI does not report when a session expires, so expiry is
+// The Skynet CLI does not yet report when a session expires
+// (`skynet auth status --json` with expires is still missing), so expiry is
 // estimated instead: the tracker observes how long past authenticated
 // periods lasted and reuses the shortest observation as a conservative
 // estimate for the current session.

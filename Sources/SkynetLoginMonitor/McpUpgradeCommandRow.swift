@@ -12,26 +12,36 @@ struct McpUpgradeCommandRow: View {
 
     var body: some View {
         if let command = CLIInstallGuide.mcpUpgradeCommand(for: finding) {
-            HStack(spacing: 8) {
-                Button(MonitorText.ComponentUpdate.openTerminalUpgrade) {
-                    copyToPasteboard(command)
-                    NSWorkspace.shared.open(
-                        URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")
-                    )
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Button(MonitorText.ComponentUpdate.openTerminalUpgrade) {
+                        copyToPasteboard(command)
+                        NSWorkspace.shared.open(
+                            URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")
+                        )
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
 
-                Button(
-                    commandCopied
-                        ? "命令已复制"
-                        : MonitorText.ComponentUpdate.copyUpgradeCommand
-                ) {
-                    copyToPasteboard(command)
-                    commandCopied = true
+                    Button(
+                        commandCopied
+                            ? "命令已复制"
+                            : MonitorText.ComponentUpdate.copyUpgradeCommand
+                    ) {
+                        copyToPasteboard(command)
+                        commandCopied = true
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
                 }
-                .buttonStyle(.borderless)
-                .font(.caption)
+                if let expectation = CLIInstallGuide.mcpUpgradeExpectation(
+                    for: finding
+                ) {
+                    Text(expectation)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }

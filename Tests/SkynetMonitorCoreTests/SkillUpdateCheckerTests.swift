@@ -229,7 +229,44 @@ final class SkillUpdateCheckerTests: XCTestCase {
 
         let result = await checker.checkForUpdates()
 
-        XCTAssertEqual(result, .failed(reason: "无法读取 skill lock 文件"))
+        XCTAssertEqual(result, .failed(reason: "无法读取已安装 Skills（CLI 或 lock）"))
+    }
+
+    func testSkillCheckerPrefersSkillListJsonOverLock() async {
+        let lockURL = writeTemporaryFile(
+            json: #"{"from-lock":{"version":"v1"},"fe-api-gen":{"version":"v9"}}"#
+        )
+        let runner = SkillListCommandRunner(
+            stdout: #"[{"name":"fe-api-gen","version":"v10"},{"name":"empty","version":""}]"#
+        )
+        let client = StubPlatformClient(
+            token: "session-token",
+            latest: ["fe-api-gen": "v11"]
+        )
+        let checker = SkillUpdateChecker(
+            lockURL: lockURL,
+            client: client,
+            locator: SkillStubLocator(url: URL(fileURLWithPath: "/fake/bin/skynet")),
+            runner: runner
+        )
+
+        let result = await checker.checkForUpdates()
+
+        XCTAssertEqual(
+            result,
+            .completed(
+                SkillUpdateReport(
+                    totalChecked: 1,
+                    updates: [
+                        SkillUpdate(
+                            name: "fe-api-gen",
+                            installedVersion: "v10",
+                            latestVersion: "v11"
+                        ),
+                    ]
+                )
+            )
+        )
     }
 
     func testSkillCheckerTreatsFetchErrorsAsUnknown() async throws {
@@ -264,6 +301,37 @@ final class SkillUpdateCheckerTests: XCTestCase {
         XCTAssertEqual(
             result,
             .failed(reason: "无法从 Skynet 平台获取版本（网络或登录态问题）")
+        )
+    }
+}
+
+private struct SkillStubLocator: CLIPathLocating {
+    let url: URL
+
+    func locate() async throws -> URL {
+        url
+    }
+}
+
+private actor SkillListCommandRunner: CommandRunning {
+    private let stdout: String
+
+    init(stdout: String) {
+        self.stdout = stdout
+    }
+
+    func run(
+        executableURL: URL,
+        arguments: [String],
+        environment: [String: String],
+        timeout: Duration
+    ) async -> CommandResult {
+        XCTAssertEqual(arguments, ["skill", "list", "--json"])
+        return CommandResult(
+            stdout: stdout,
+            stderr: "",
+            exitCode: 0,
+            timedOut: false
         )
     }
 }

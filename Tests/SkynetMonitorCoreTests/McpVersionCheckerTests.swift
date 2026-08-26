@@ -102,6 +102,65 @@ final class McpVersionCheckerTests: XCTestCase {
         )
     }
 
+    func testMcpCheckerAnnotatesNvmMismatchAgainstLoginShellNode() async throws {
+        let root = makeTemporaryDirectory()
+        let nvmBin = root.appendingPathComponent(
+            ".nvm/versions/node/v22.22.3/bin",
+            isDirectory: true
+        )
+        let packageURL = root
+            .appendingPathComponent(
+                ".nvm/versions/node/v22.22.3/lib/node_modules/@shopee/skynet-base"
+            )
+        try FileManager.default.createDirectory(
+            at: packageURL,
+            withIntermediateDirectories: true
+        )
+        try """
+        {"name":"@shopee/skynet-base","version":"2.12.3",
+         "bin":{"skynet-mcp":"dist/mcp.js"}}
+        """
+        .write(
+            to: packageURL.appendingPathComponent("package.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try FileManager.default.createDirectory(
+            at: nvmBin,
+            withIntermediateDirectories: true
+        )
+        FileManager.default.createFile(
+            atPath: nvmBin.appendingPathComponent("skynet-mcp").path,
+            contents: nil
+        )
+
+        let commandPath = nvmBin.appendingPathComponent("skynet-mcp").path
+        let configURL = writeTemporaryFile(
+            json: """
+            {"mcpServers":{
+              "skynet-base":{"command":"\(commandPath)","args":[]}
+            }}
+            """
+        )
+        let runner = NvmProbeCommandRunner(
+            nodePath: "\(root.path)/.nvm/versions/node/v22.23.2/bin/node"
+        )
+        let checker = McpVersionChecker(
+            cursorConfigURL: configURL,
+            codexConfigURL: nil,
+            registry: StubRegistry(versions: ["@shopee/skynet-base": "2.12.3"]),
+            binarySearchPaths: [],
+            runner: runner
+        )
+
+        let findings = await checker.checkVersions()
+
+        let finding = try XCTUnwrap(findings.first)
+        XCTAssertEqual(finding.configuredNvmNode, "v22.22.3")
+        XCTAssertEqual(finding.pathNvmNode, "v22.23.2")
+        XCTAssertTrue(finding.hasNvmNodeMismatch)
+    }
+
     func testMcpCheckerFallsBackToSearchPathsForMissingBinary() async throws {
         let root = makeTemporaryDirectory()
         let packageURL = root
@@ -244,4 +303,27 @@ final class McpVersionCheckerTests: XCTestCase {
             ]
         )
         XCTAssertTrue(findings.allSatisfy(\.isUpgradable))
-    }}
+    }
+}
+
+private actor NvmProbeCommandRunner: CommandRunning {
+    private let nodePath: String
+
+    init(nodePath: String) {
+        self.nodePath = nodePath
+    }
+
+    func run(
+        executableURL: URL,
+        arguments: [String],
+        environment: [String: String],
+        timeout: Duration
+    ) async -> CommandResult {
+        CommandResult(
+            stdout: nodePath + "\n",
+            stderr: "",
+            exitCode: 0,
+            timedOut: false
+        )
+    }
+}

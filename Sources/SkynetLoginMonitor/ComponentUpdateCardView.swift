@@ -141,6 +141,9 @@ struct ComponentUpdateCardView: View {
                     ),
                 warning: !report.updates.isEmpty
             )
+            Text(MonitorText.ComponentUpdate.skillSectionCaption)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
             ForEach(report.updates.prefix(3)) { update in
                 changeRow(
                     title: update.name,
@@ -175,9 +178,32 @@ struct ComponentUpdateCardView: View {
                 MonitorText.ComponentUpdate.mcpSection,
                 detail: nil,
                 warning: mcpFindings.contains(where: \.isUpgradable)
+                    || mcpFindings.contains(where: \.hasNvmNodeMismatch)
             )
+            Text(MonitorText.ComponentUpdate.mcpSectionCaption)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
             ForEach(mcpFindings) { finding in
                 mcpRow(finding)
+            }
+            ForEach(
+                CLIInstallGuide.mcpRetargetNvmFindings(from: mcpFindings)
+            ) { finding in
+                if let command = CLIInstallGuide.mcpRetargetNvmCommand(
+                    for: finding
+                ),
+                   let from = finding.configuredNvmNode,
+                   let to = finding.pathNvmNode
+                {
+                    UpgradeActionRow(
+                        title: "\(finding.configSource) Node \(from) → \(to)",
+                        detail: nil,
+                        primaryLabel: MonitorText.ComponentUpdate.copyRetargetNvm,
+                        primaryCommand: command,
+                        expectation: MonitorText.ComponentUpdate
+                            .upgradeExpectRetargetNvm
+                    )
+                }
             }
             let upgradable = mcpFindings.filter(\.isUpgradable)
             if upgradable.count > 1,
@@ -191,7 +217,8 @@ struct ComponentUpdateCardView: View {
                     primaryLabel: MonitorText.ComponentUpdate.openTerminalUpgrade,
                     primaryCommand: script,
                     fallbackLabel: MonitorText.ComponentUpdate.copyAllUpgradeCommands,
-                    fallbackCommand: script
+                    fallbackCommand: script,
+                    expectation: MonitorText.ComponentUpdate.upgradeExpectBulk
                 )
             }
         }
@@ -219,7 +246,7 @@ struct ComponentUpdateCardView: View {
         }
     }
 
-    // Generated command rewrites IDE configs via `skynet mcp install`.
+    // Pasteable command: pin bump / npm --prefix / last-resort skynet install.
     private func mcpRow(_ finding: McpVersionFinding) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .top, spacing: 6) {
@@ -255,43 +282,61 @@ struct ComponentUpdateCardView: View {
         if finding.unpinned {
             return MonitorText.ComponentUpdate.unpinnedDetail
         }
+        let mismatch = nvmMismatchSuffix(finding)
         if finding.configuredBinaryMissing {
-            let node = pinnedNodeHint(finding).map { "node \($0)" } ?? "配置路径"
+            let node = finding.configuredNvmNode.map { "node \($0)" } ?? "配置路径"
             if let installed = finding.installedVersion,
                let latest = finding.latestVersion
             {
-                return "\(node) 缺失 · \(installed) → \(latest)"
+                return joinDetail("\(node) 缺失", mismatch, "\(installed) → \(latest)")
             }
             if let latest = finding.latestVersion {
-                return "\(node) 缺失 · 安装 \(latest)"
+                return joinDetail("\(node) 缺失", mismatch, "安装 \(latest)")
             }
-            return "\(node) 缺失"
+            return joinDetail("\(node) 缺失", mismatch, nil)
         }
         guard let installed = finding.installedVersion else {
-            return MonitorText.ComponentUpdate.unavailableDetail
+            return joinDetail(
+                MonitorText.ComponentUpdate.unavailableDetail,
+                mismatch,
+                nil
+            )
         }
         guard let latest = finding.latestVersion else {
-            return "\(installed) · \(MonitorText.ComponentUpdate.unavailableDetail)"
+            return joinDetail(
+                "\(installed) · \(MonitorText.ComponentUpdate.unavailableDetail)",
+                mismatch,
+                nil
+            )
         }
         if finding.isUpgradable {
-            return "\(installed) → \(latest)"
+            return joinDetail("\(installed) → \(latest)", mismatch, nil)
         }
-        return "\(installed) \(MonitorText.UpdateCheck.upToDate)"
+        return joinDetail(
+            "\(installed) \(MonitorText.UpdateCheck.upToDate)",
+            mismatch,
+            nil
+        )
     }
 
-    private func pinnedNodeHint(_ finding: McpVersionFinding) -> String? {
-        guard let command = finding.configuredCommand,
-              command.contains("/.nvm/versions/node/")
+    private func nvmMismatchSuffix(_ finding: McpVersionFinding) -> String? {
+        guard let configured = finding.configuredNvmNode,
+              let path = finding.pathNvmNode
         else {
             return nil
         }
-        let parts = command.split(separator: "/")
-        guard let index = parts.firstIndex(of: "node"),
-              index + 1 < parts.count
-        else {
-            return nil
-        }
-        return String(parts[index + 1])
+        return MonitorText.ComponentUpdate.nvmMismatchDetail(
+            configured: configured,
+            path: path
+        )
+    }
+
+    private func joinDetail(
+        _ head: String,
+        _ middle: String?,
+        _ tail: String?
+    ) -> String {
+        [head, middle, tail].compactMap { $0 }.joined(separator: " · ")
     }
 
     private func sectionHeader(
