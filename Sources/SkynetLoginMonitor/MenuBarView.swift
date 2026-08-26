@@ -23,7 +23,7 @@ struct MenuBarView: View {
     var body: some View {
         let presentation = store.state.presentation
 
-        ScrollView {
+        ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 10) {
                     Image(systemName: presentation.symbolName)
@@ -206,17 +206,18 @@ struct MenuBarView: View {
                 }
             }
             .padding(16)
+            .frame(width: 320, alignment: .leading)
         }
         .frame(width: 320)
         .frame(maxHeight: Self.panelMaxHeight)
         .background(.regularMaterial)
     }
 
-    // MenuBarExtra windows do not clip or scroll on their own; cap to the
-    // visible display so DisclosureGroups can expand without falling off-screen.
+    // Cap below full-screen: MenuBarExtra + ScrollView with ~screen height
+    // previously sized into a full-width strip under the menu bar.
     private static var panelMaxHeight: CGFloat {
         let visible = NSScreen.main?.visibleFrame.height ?? 700
-        return max(320, visible - 24)
+        return min(620, max(360, visible * 0.65))
     }
 
     private var appVersionText: String {

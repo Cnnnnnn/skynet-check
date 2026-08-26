@@ -9,7 +9,9 @@ follow the newest `v*` git tag; the build number is the commit count.
 
 - Menu bar panel content scrolls when expanded cards exceed the visible
   display height (previously grew off-screen with no way to reach the
-  bottom).
+  bottom). Vertical-only ScrollView with a ~65% screen height cap; an
+  earlier full-height ScrollView could size the MenuBarExtra into a
+  full-width strip under the menu bar.
 
 ### Changed
 
