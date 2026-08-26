@@ -5,11 +5,21 @@ follow the newest `v*` git tag; the build number is the commit count.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-26
+
 ### Added
 
 - "检查更新" is live: the panel queries this project's GitHub Releases
   (the release workflow attaches a DMG to every `v*` tag) and offers the
   download when a newer version exists.
+- The first notification after a do-not-disturb window expires now
+  carries a "已抑制 N 条通知" summary, so nothing silently vanished
+  during the pause. An explicit resume clears silently.
+- Shortcuts integration via App Intents: "查询登录状态" (reads the
+  persisted snapshot, instant), "立即检查登录" (one real CLI probe) and
+  "切换通知勿扰" (cycles the mute window off → 30min → 1h → 4h → off)
+  are available in the Shortcuts app for automations and keyboard
+  triggers. The settings section lists the available actions.
 
 ### Changed
 
@@ -23,17 +33,6 @@ follow the newest `v*` git tag; the build number is the commit count.
   newer than its own release, which previously masked upgrade prompts.
 - MCP configs that exist but cannot be read or parsed are logged with
   their path instead of silently counting as "no servers configured".
-
-### Added
-
-- The first notification after a do-not-disturb window expires now
-  carries a "已抑制 N 条通知" summary, so nothing silently vanished
-  during the pause. An explicit resume clears silently.
-- Shortcuts integration via App Intents: "查询登录状态" (reads the
-  persisted snapshot, instant), "立即检查登录" (one real CLI probe) and
-  "切换通知勿扰" (cycles the mute window off → 30min → 1h → 4h → off)
-  are available in the Shortcuts app for automations and keyboard
-  triggers. The settings section lists the available actions.
 
 ## [0.8.0] - 2026-08-24
 

@@ -23,10 +23,6 @@ public struct NotificationMuteWindow: Codable, Equatable, Sendable {
         }
         return window.pausedUntil > now
     }
-
-    public static func storageKey(in defaults: UserDefaults) -> Data? {
-        defaults.data(forKey: "notificationMuteWindow")
-    }
 }
 
 public final class NotificationMuteStore: @unchecked Sendable {
