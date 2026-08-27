@@ -7,9 +7,10 @@ follow the newest `v*` git tag; the build number is the commit count.
 
 ### Fixed
 
-- Long MCP lists no longer try to scroll the whole MenuBarExtra window
-  (SwiftUI sizes that into a flat strip). The panel is a normal VStack
-  again; MCP rows mirror skills and tuck extras behind “查看更多”.
+- Menu bar panel scrolls when expanded content exceeds ~70% of the
+  visible screen: measure intrinsic height and set an explicit
+  `frame(height:)` (MenuBarExtra + `maxHeight`-only ScrollView collapses
+  into a flat strip). Short panels stay tight to their content.
 
 ### Changed
 
