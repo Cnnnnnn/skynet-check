@@ -7,11 +7,9 @@ follow the newest `v*` git tag; the build number is the commit count.
 
 ### Fixed
 
-- Menu bar panel content scrolls when expanded cards exceed the visible
-  display height (previously grew off-screen with no way to reach the
-  bottom). Vertical-only ScrollView with a ~65% screen height cap; an
-  earlier full-height ScrollView could size the MenuBarExtra into a
-  full-width strip under the menu bar.
+- Long MCP lists no longer try to scroll the whole MenuBarExtra window
+  (SwiftUI sizes that into a flat strip). The panel is a normal VStack
+  again; MCP rows mirror skills and tuck extras behind “查看更多”.
 
 ### Changed
 

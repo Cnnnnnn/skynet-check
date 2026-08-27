@@ -15,6 +15,7 @@ struct ComponentUpdateCardView: View {
 
     @State private var isExpanded = false
     @State private var isMoreExpanded = false
+    @State private var isMoreMcpExpanded = false
 
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
@@ -183,8 +184,14 @@ struct ComponentUpdateCardView: View {
             Text(MonitorText.ComponentUpdate.mcpSectionCaption)
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
-            ForEach(mcpFindings) { finding in
+            // MenuBarExtra cannot host a root ScrollView reliably; keep the
+            // panel intrinsic height and tuck long MCP lists behind disclosure
+            // the same way skills already do.
+            ForEach(mcpFindings.prefix(3)) { finding in
                 mcpRow(finding)
+            }
+            if mcpFindings.count > 3 {
+                moreMcpsDisclosure(remaining: Array(mcpFindings.dropFirst(3)))
             }
             ForEach(
                 CLIInstallGuide.mcpRetargetNvmFindings(from: mcpFindings)
@@ -221,6 +228,29 @@ struct ComponentUpdateCardView: View {
                     expectation: MonitorText.ComponentUpdate.upgradeExpectBulk
                 )
             }
+        }
+    }
+
+    private func moreMcpsDisclosure(remaining: [McpVersionFinding]) -> some View {
+        DisclosureGroup(isExpanded: $isMoreMcpExpanded) {
+            // Fixed-height nested scroll is OK; a root ScrollView is not —
+            // MenuBarExtra sizes root ScrollView ideal height to a flat strip.
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 7) {
+                    ForEach(remaining) { finding in
+                        mcpRow(finding)
+                    }
+                }
+            }
+            .frame(height: min(240, CGFloat(remaining.count) * 72))
+            .padding(.top, 4)
+        } label: {
+            Label(
+                "查看更多（剩余 \(remaining.count) 个）",
+                systemImage: "ellipsis.rectangle"
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
     }
 

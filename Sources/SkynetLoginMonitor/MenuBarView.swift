@@ -23,201 +23,190 @@ struct MenuBarView: View {
     var body: some View {
         let presentation = store.state.presentation
 
-        ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 10) {
-                    Image(systemName: presentation.symbolName)
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundStyle(presentation.tint.color)
-                        .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Image(systemName: presentation.symbolName)
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(presentation.tint.color)
+                    .accessibilityHidden(true)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Skynet")
-                            .font(.headline)
-                        Text(presentation.title)
-                            .font(.subheadline)
-                            .foregroundStyle(presentation.tint.color)
-                    }
-
-                    Spacer(minLength: 12)
-
-                    if store.isChecking {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Skynet \(presentation.title)")
-
-                if let email = store.state.authenticatedEmail {
-                    Label(email, systemImage: "person.crop.circle")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Skynet")
+                        .font(.headline)
+                    Text(presentation.title)
                         .font(.subheadline)
-                        .lineLimit(1)
+                        .foregroundStyle(presentation.tint.color)
                 }
 
-                Text(MonitorText.SessionExpiry.scopeCaption)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                Spacer(minLength: 12)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    if let cliVersion = store.cliVersion {
-                        Label("CLI \(cliVersion)", systemImage: "terminal")
-                    }
-                    if let lastCheckedAt = store.lastCheckedAt,
-                       let lastCompletedState = store.lastCompletedState {
-                        Label(
-                            "最近：\(lastCompletedState.presentation.title) · "
-                                + lastCheckedAt.formatted(date: .omitted, time: .shortened),
-                            systemImage: "clock"
-                        )
-                    }
-                    if let nextAutomaticCheckAt = store.nextAutomaticCheckAt {
-                        Label(
-                            "下次自动检查：\(nextAutomaticCheckAt.formatted(date: .omitted, time: .shortened))",
-                            systemImage: "timer"
-                        )
-                    }
-                    if let sessionExpiresAt = store.sessionExpiresAt {
-                        Label(
-                            SessionExpiryPresentation.panelLabel(expiresAt: sessionExpiresAt),
-                            systemImage: "clock.badge.exclamationmark"
-                        )
-                    } else if store.sessionExpiryOutlived {
-                        Label(
-                            MonitorText.SessionExpiry.panelOutlived,
-                            systemImage: "clock.badge.exclamationmark"
-                        )
-                    }
-                    if let sessionStatistics = store.sessionStatistics {
-                        Label(
-                            "平均会话 \(DurationPresentation.summarize(sessionStatistics.average))"
-                                + "（近 \(sessionStatistics.observationCount) 次）",
-                            systemImage: "chart.bar"
-                        )
-                    }
+                if store.isChecking {
+                    ProgressView()
+                        .controlSize(.small)
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Skynet \(presentation.title)")
 
-                Divider()
+            if let email = store.state.authenticatedEmail {
+                Label(email, systemImage: "person.crop.circle")
+                    .font(.subheadline)
+                    .lineLimit(1)
+            }
 
-                if store.state == .cliMissing {
-                    MissingCLICardView(
-                        isChecking: store.isChecking,
-                        onRefresh: { Task { await store.refresh() } }
+            Text(MonitorText.SessionExpiry.scopeCaption)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+
+            VStack(alignment: .leading, spacing: 4) {
+                if let cliVersion = store.cliVersion {
+                    Label("CLI \(cliVersion)", systemImage: "terminal")
+                }
+                if let lastCheckedAt = store.lastCheckedAt,
+                   let lastCompletedState = store.lastCompletedState {
+                    Label(
+                        "最近：\(lastCompletedState.presentation.title) · "
+                            + lastCheckedAt.formatted(date: .omitted, time: .shortened),
+                        systemImage: "clock"
                     )
-                } else {
-                    HStack(spacing: 8) {
-                        Button {
-                            Task { await store.refresh(notifyResult: true) }
-                        } label: {
-                            Label("立即检查", systemImage: "arrow.clockwise")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                        .disabled(store.isChecking)
-
-                        Button {
-                            Task { await store.login() }
-                        } label: {
-                            Label("重新登录", systemImage: "person.crop.circle.badge.arrow.right")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .disabled(store.isChecking)
-                    }
                 }
-
-                if case let .serviceError(message) = store.state {
-                    Text(message)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                if let nextAutomaticCheckAt = store.nextAutomaticCheckAt {
+                    Label(
+                        "下次自动检查：\(nextAutomaticCheckAt.formatted(date: .omitted, time: .shortened))",
+                        systemImage: "timer"
+                    )
                 }
+                if let sessionExpiresAt = store.sessionExpiresAt {
+                    Label(
+                        SessionExpiryPresentation.panelLabel(expiresAt: sessionExpiresAt),
+                        systemImage: "clock.badge.exclamationmark"
+                    )
+                } else if store.sessionExpiryOutlived {
+                    Label(
+                        MonitorText.SessionExpiry.panelOutlived,
+                        systemImage: "clock.badge.exclamationmark"
+                    )
+                }
+                if let sessionStatistics = store.sessionStatistics {
+                    Label(
+                        "平均会话 \(DurationPresentation.summarize(sessionStatistics.average))"
+                            + "（近 \(sessionStatistics.observationCount) 次）",
+                        systemImage: "chart.bar"
+                    )
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
 
-                if let loginURL = store.loginURL, !store.state.isAuthenticated {
+            Divider()
+
+            if store.state == .cliMissing {
+                MissingCLICardView(
+                    isChecking: store.isChecking,
+                    onRefresh: { Task { await store.refresh() } }
+                )
+            } else {
+                HStack(spacing: 8) {
                     Button {
-                        NSWorkspace.shared.open(loginURL)
+                        Task { await store.refresh(notifyResult: true) }
                     } label: {
-                        Label("打开登录页面", systemImage: "safari")
+                        Label("立即检查", systemImage: "arrow.clockwise")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(store.isChecking)
+
+                    Button {
+                        Task { await store.login() }
+                    } label: {
+                        Label("重新登录", systemImage: "person.crop.circle.badge.arrow.right")
+                            .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                }
-
-                if let environmentReport = store.environmentReport {
-                    EnvironmentCardView(
-                        report: environmentReport,
-                        notificationPermission: store.notificationPermission,
-                        onRecheck: { Task { await store.inspectEnvironment() } }
-                    )
-                }
-
-                if store.showsComponentUpdates {
-                    ComponentUpdateCardView(
-                        phase: store.skillUpdatePhase,
-                        skillReport: store.skillUpdateReport,
-                        skillFailureDetail: store.skillUpdateFailureDetail,
-                        mcpFindings: store.mcpVersionFindings,
-                        checkedAt: store.componentUpdateCheckedAt,
-                        onRecheck: { Task { await store.checkComponentUpdates() } }
-                    )
-                }
-
-                if !store.serviceTokens.isEmpty {
-                    ServiceTokenCardView(
-                        tokens: store.serviceTokens,
-                        validation: store.tokenValidation
-                    )
-                }
-
-                if store.permissionAudit.needsRepair {
-                    PermissionCardView(
-                        repairMessage: store.permissionRepairMessage,
-                        onRepair: { store.repairPermissions() }
-                    )
-                }
-
-                Divider()
-
-                SettingsSectionView(
-                    store: store,
-                    launchAtLogin: launchAtLogin,
-                    muteStore: muteStore
-                )
-
-                HStack {
-                    Text("Skynet Login Monitor \(appVersionText)")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                    Spacer()
-                    Button(diagnosticsCopied ? "已复制" : "复制诊断") {
-                        copyDiagnostics()
-                    }
-                    .buttonStyle(.borderless)
-                    .font(.caption)
-                    Button("退出") {
-                        store.stop()
-                        NSApplication.shared.terminate(nil)
-                    }
-                    .buttonStyle(.borderless)
-                    .font(.caption)
+                    .disabled(store.isChecking)
                 }
             }
-            .padding(16)
-            .frame(width: 320, alignment: .leading)
+
+            if case let .serviceError(message) = store.state {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let loginURL = store.loginURL, !store.state.isAuthenticated {
+                Button {
+                    NSWorkspace.shared.open(loginURL)
+                } label: {
+                    Label("打开登录页面", systemImage: "safari")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
+            if let environmentReport = store.environmentReport {
+                EnvironmentCardView(
+                    report: environmentReport,
+                    notificationPermission: store.notificationPermission,
+                    onRecheck: { Task { await store.inspectEnvironment() } }
+                )
+            }
+
+            if store.showsComponentUpdates {
+                ComponentUpdateCardView(
+                    phase: store.skillUpdatePhase,
+                    skillReport: store.skillUpdateReport,
+                    skillFailureDetail: store.skillUpdateFailureDetail,
+                    mcpFindings: store.mcpVersionFindings,
+                    checkedAt: store.componentUpdateCheckedAt,
+                    onRecheck: { Task { await store.checkComponentUpdates() } }
+                )
+            }
+
+            if !store.serviceTokens.isEmpty {
+                ServiceTokenCardView(
+                    tokens: store.serviceTokens,
+                    validation: store.tokenValidation
+                )
+            }
+
+            if store.permissionAudit.needsRepair {
+                PermissionCardView(
+                    repairMessage: store.permissionRepairMessage,
+                    onRepair: { store.repairPermissions() }
+                )
+            }
+
+            Divider()
+
+            SettingsSectionView(
+                store: store,
+                launchAtLogin: launchAtLogin,
+                muteStore: muteStore
+            )
+
+            HStack {
+                Text("Skynet Login Monitor \(appVersionText)")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                Spacer()
+                Button(diagnosticsCopied ? "已复制" : "复制诊断") {
+                    copyDiagnostics()
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
+                Button("退出") {
+                    store.stop()
+                    NSApplication.shared.terminate(nil)
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
+            }
         }
         .frame(width: 320)
-        .frame(maxHeight: Self.panelMaxHeight)
+        .padding(16)
         .background(.regularMaterial)
-    }
-
-    // Cap below full-screen: MenuBarExtra + ScrollView with ~screen height
-    // previously sized into a full-width strip under the menu bar.
-    private static var panelMaxHeight: CGFloat {
-        let visible = NSScreen.main?.visibleFrame.height ?? 700
-        return min(620, max(360, visible * 0.65))
     }
 
     private var appVersionText: String {
