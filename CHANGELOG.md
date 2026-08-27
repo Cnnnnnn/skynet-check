@@ -5,6 +5,8 @@ follow the newest `v*` git tag; the build number is the commit count.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-08-27
+
 ### Fixed
 
 - Menu bar panel scrolls when expanded content exceeds ~70% of the
