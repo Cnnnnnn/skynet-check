@@ -60,11 +60,19 @@ public enum CLIInstallGuide {
             else {
                 return nil
             }
-            return mcpNpmInstallCommand(
+            let install = mcpNpmInstallCommand(
                 package: package,
                 version: latest,
-                configuredCommand: finding.configuredCommand
+                configuredCommand: npmInstallAnchor(for: finding)
             )
+            // Config points at a missing nvm pin: install into the live PATH
+            // node and rewrite the IDE path in one paste when we know both.
+            if finding.configuredBinaryMissing,
+               let retarget = mcpRetargetNvmCommand(for: finding)
+            {
+                return install + "\n\n" + retarget
+            }
+            return install
         case .skynetUpdateTools:
             return mcpRepairCommand
         case .skynetMcpInstall:
@@ -89,7 +97,9 @@ public enum CLIInstallGuide {
         }
 
         if finding.packageName != nil, finding.latestVersion != nil {
-            let pinned = npmPrefix(forConfiguredCommand: finding.configuredCommand) != nil
+            let pinned = npmPrefix(
+                forConfiguredCommand: npmInstallAnchor(for: finding)
+            ) != nil
             return .npmInstall(usesPinnedNode: pinned)
         }
 
@@ -110,6 +120,9 @@ public enum CLIInstallGuide {
         case .pinBump:
             return MonitorText.ComponentUpdate.upgradeExpectPin
         case .npmInstall(let usesPinnedNode):
+            if finding.configuredBinaryMissing, finding.pathNvmNode != nil {
+                return MonitorText.ComponentUpdate.upgradeExpectNpmMissingToPath
+            }
             return usesPinnedNode
                 ? MonitorText.ComponentUpdate.upgradeExpectNpmPinned
                 : MonitorText.ComponentUpdate.upgradeExpectNpm
@@ -190,6 +203,23 @@ public enum CLIInstallGuide {
             return nil
         }
         return commands.joined(separator: "\n\n")
+    }
+
+    // When the IDE pin's binary is gone, prefer the login-shell nvm node so
+    // `npm --prefix` does not target a deleted Node install.
+    private static func npmInstallAnchor(
+        for finding: McpVersionFinding
+    ) -> String? {
+        if finding.configuredBinaryMissing,
+           let pathNode = finding.pathNvmNode
+        {
+            return FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent(".nvm/versions/node")
+                .appendingPathComponent(pathNode)
+                .appendingPathComponent("bin/npm")
+                .path
+        }
+        return finding.configuredCommand
     }
 
     private static func mcpNpmInstallCommand(

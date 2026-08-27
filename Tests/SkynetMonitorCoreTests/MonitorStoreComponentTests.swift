@@ -134,4 +134,34 @@ final class MonitorStoreComponentTests: XCTestCase {
             "无法读取 skill lock 文件"
         )
     }
+
+    @MainActor
+    func testUpgradeCommandMarksPendingRecheckConsumedOnPanelReopen() async {
+        let skillChecker = MutableSkillUpdateChecker()
+        skillChecker.result = .completed(
+            SkillUpdateReport(totalChecked: 1, updates: [])
+        )
+        let store = makeStore(skillChecker: skillChecker)
+
+        store.noteComponentUpgradeCommandUsed()
+        XCTAssertTrue(store.pendingComponentRecheckAfterUpgrade)
+
+        await store.recheckComponentsIfUpgradePending()
+
+        XCTAssertFalse(store.pendingComponentRecheckAfterUpgrade)
+        XCTAssertEqual(store.skillUpdatePhase, .completed)
+    }
+
+    @MainActor
+    func testRecheckIfUpgradePendingIsNoOpWhenNotArmed() async {
+        let skillChecker = MutableSkillUpdateChecker()
+        skillChecker.result = .completed(
+            SkillUpdateReport(totalChecked: 1, updates: [])
+        )
+        let store = makeStore(skillChecker: skillChecker)
+
+        await store.recheckComponentsIfUpgradePending()
+
+        XCTAssertEqual(store.skillUpdatePhase, .idle)
+    }
 }

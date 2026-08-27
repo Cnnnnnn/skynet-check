@@ -135,6 +135,44 @@ final class CLIInstallGuideTests: XCTestCase {
         )
     }
 
+    func testMissingBinaryInstallsToPathNodeAndRetargetsConfig() {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let finding = McpVersionFinding(
+            serverName: "skynet-base",
+            packageName: "@shopee/skynet-base",
+            installedVersion: "2.9.1",
+            latestVersion: "2.12.3",
+            configSource: "Cursor",
+            configuredCommand:
+                "\(home)/.nvm/versions/node/v22.22.3/bin/skynet-mcp",
+            configuredBinaryMissing: true,
+            pathNvmNode: "v22.23.2"
+        )
+
+        let command = CLIInstallGuide.mcpUpgradeCommand(for: finding)
+
+        XCTAssertEqual(
+            CLIInstallGuide.mcpUpgradeExpectation(for: finding),
+            MonitorText.ComponentUpdate.upgradeExpectNpmMissingToPath
+        )
+        let install = [
+            "\(home)/.nvm/versions/node/v22.23.2/bin/npm",
+            "install -g @shopee/skynet-base@2.12.3",
+            "--registry https://npm.shopee.io",
+            "--prefix '\(home)/.nvm/versions/node/v22.23.2'",
+        ].joined(separator: " ")
+        XCTAssertTrue(
+            command?.hasPrefix(install) == true,
+            "expected PATH-node install, got: \(command ?? "nil")"
+        )
+        XCTAssertTrue(
+            command?.contains("/.nvm/versions/node/v22.22.3/") == true
+        )
+        XCTAssertTrue(
+            command?.contains("path = Path.home() / \".cursor/mcp.json\"") == true
+        )
+    }
+
     func testUpgradeStrategyAndExpectationMatchCommandPaths() {
         let pin = McpVersionFinding(
             serverName: "Banking FE MCP",

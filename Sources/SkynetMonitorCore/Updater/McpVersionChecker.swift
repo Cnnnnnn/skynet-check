@@ -135,6 +135,11 @@ public struct McpVersionFinding: Codable, Equatable, Sendable {
         pathNvmNode != nil
     }
 
+    // Higher first on the component card: upgrades, then nvm mismatches.
+    public var displayAttentionRank: Int {
+        (isUpgradable ? 2 : 0) + (hasNvmNodeMismatch ? 1 : 0)
+    }
+
     // Treat a missing configured binary as needing an upgrade even when a
     // PATH fallback happens to already match latest — the IDE won't start it.
     public var isUpgradable: Bool {
@@ -165,6 +170,22 @@ public struct McpVersionFinding: Codable, Equatable, Sendable {
             configuredNvmNode: configuredNvmNode,
             pathNvmNode: pathNvmNode
         )
+    }
+
+    // Stable: upgradable / nvm-mismatch rows float up; ties keep input order.
+    public static func sortedForDisplay(
+        _ findings: [McpVersionFinding]
+    ) -> [McpVersionFinding] {
+        findings.enumerated()
+            .sorted { lhs, rhs in
+                let left = lhs.element.displayAttentionRank
+                let right = rhs.element.displayAttentionRank
+                if left != right {
+                    return left > right
+                }
+                return lhs.offset < rhs.offset
+            }
+            .map(\.element)
     }
 }
 

@@ -113,6 +113,10 @@ public enum MonitorText {
     }
 
     public enum Environment {
+        // Distinct from the component-version card: Doctor follows CLI list
+        // + team lock; the card follows IDE launch configs + platform latest.
+        public static let scopeCaption =
+            "CLI / 团队 lock 口径（组件卡另看 IDE 配置与平台最新）"
         public static let cliMissingDetail = "未找到可执行文件"
         public static let nodeMissingDetail = "未找到 Node.js"
         public static let networkAvailableDetail = "网络可用"
@@ -204,20 +208,24 @@ public enum MonitorText {
         public static let openTerminalUpgrade = "Terminal 升级"
         // What “success” / common failure looks like for each upgrade path.
         public static let upgradeExpectPin =
-            "成功会打印 updated …；改完后在对应 IDE 重载 MCP，再点重新检查。"
+            "成功会打印 updated …；改完后在对应 IDE 重载 MCP，回到本面板会自动复检。"
         public static let upgradeExpectNpmPinned =
-            "装到配置里的 Node（不是当前 shell 的 nvm）；完成后点重新检查。"
+            "装到配置里的 Node（不是当前 shell 的 nvm）；跑完后回到本面板会自动复检。"
+        public static let upgradeExpectNpmMissingToPath =
+            "配置路径缺失，先装到 PATH 的 Node 再改 IDE 配置；跑完后回到本面板会自动复检。"
         public static let upgradeExpectNpm =
-            "装到当前 PATH 的 npm；若 IDE 写死了别的 nvm 路径，仍可能读旧二进制。完成后点重新检查。"
+            "装到当前 PATH 的 npm；若 IDE 写死了别的 nvm 路径，仍可能读旧二进制。跑完后回到本面板会自动复检。"
         public static let upgradeExpectUpdateTools =
-            "刷新 Skynet 工具链；对已配置 MCP 有时无效。完成后点重新检查。"
+            "刷新 Skynet 工具链；对已配置 MCP 有时无效。跑完后回到本面板会自动复检。"
         public static let upgradeExpectSkynetInstall =
-            "适合首次安装。已配置时常无改动；带版本号易遇平台 pending。"
+            "适合首次安装。已配置时常无改动；带版本号易遇平台 pending。跑完后回到本面板会自动复检。"
         public static let upgradeExpectBulk =
-            "按顺序在 Terminal 执行；全部跑完后点重新检查。"
+            "按顺序在 Terminal 执行；跑完后回到本面板会自动复检。"
+        public static let upgradeExpectSkill =
+            "安装平台最新 main；跑完后回到本面板会自动复检。"
         public static let copyRetargetNvm = "改配置到 PATH Node"
         public static let upgradeExpectRetargetNvm =
-            "把配置里冻结的 nvm 路径改成当前 PATH 的 Node；改完后重载 MCP，再点重新检查。"
+            "把配置里冻结的 nvm 路径改成当前 PATH 的 Node；改完后重载 MCP，回到本面板会自动复检。"
         public static func nvmMismatchDetail(
             configured: String,
             path: String

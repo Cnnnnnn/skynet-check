@@ -164,7 +164,10 @@ struct MenuBarView: View {
                         skillFailureDetail: store.skillUpdateFailureDetail,
                         mcpFindings: store.mcpVersionFindings,
                         checkedAt: store.componentUpdateCheckedAt,
-                        onRecheck: { Task { await store.checkComponentUpdates() } }
+                        onRecheck: { Task { await store.checkComponentUpdates() } },
+                        onUpgradeCommandUsed: {
+                            store.noteComponentUpgradeCommandUsed()
+                        }
                     )
                 }
 
@@ -230,6 +233,9 @@ struct MenuBarView: View {
         .frame(width: 320)
         .frame(height: panelViewportHeight)
         .background(.regularMaterial)
+        .onAppear {
+            Task { await store.recheckComponentsIfUpgradePending() }
+        }
     }
 
     // Explicit height (not maxHeight): short content keeps a tight panel;

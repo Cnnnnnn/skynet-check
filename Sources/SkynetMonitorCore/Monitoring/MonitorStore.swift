@@ -71,6 +71,9 @@ public final class MonitorStore: ObservableObject {
     var refreshPending = false
     private var pendingResultNotification = false
     var componentUpdateInProgress = false
+    // Armed when the user copies/opens an upgrade command; the next panel
+    // open rechecks so they don't have to remember “重新检查”.
+    var pendingComponentRecheckAfterUpgrade = false
     // One notification per "fell behind" episode; see
     // MonitorStore+ComponentUpdates.swift.
     var notifiedComponentUpdatesEpisode = false

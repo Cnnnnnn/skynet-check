@@ -8,6 +8,7 @@ extension MonitorStore {
     // Compares locally installed skills/MCP packages against their remote
     // latest versions.
     public func checkComponentUpdates() async {
+        pendingComponentRecheckAfterUpgrade = false
         guard skillUpdateChecker != nil || mcpVersionChecker != nil else {
             return
         }
@@ -57,6 +58,18 @@ extension MonitorStore {
             )
         )
         componentUpdateInProgress = false
+    }
+
+    public func noteComponentUpgradeCommandUsed() {
+        pendingComponentRecheckAfterUpgrade = true
+    }
+
+    // Menu bar panel re-appeared after the user likely ran a pasted upgrade.
+    public func recheckComponentsIfUpgradePending() async {
+        guard pendingComponentRecheckAfterUpgrade else {
+            return
+        }
+        await checkComponentUpdates()
     }
 
     // One notification per "fell behind" episode; a fully clean completed

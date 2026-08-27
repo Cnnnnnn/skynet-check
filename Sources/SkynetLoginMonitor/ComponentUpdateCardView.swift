@@ -12,6 +12,7 @@ struct ComponentUpdateCardView: View {
     let mcpFindings: [McpVersionFinding]
     let checkedAt: Date?
     let onRecheck: () -> Void
+    var onUpgradeCommandUsed: (() -> Void)?
 
     @State private var isExpanded = false
     @State private var isMoreExpanded = false
@@ -155,17 +156,20 @@ struct ComponentUpdateCardView: View {
                 moreSkillsDisclosure(remaining: Array(report.updates.dropFirst(3)))
             }
             if !report.updates.isEmpty {
+                let skillCommand = CLIInstallGuide.skillUpgradeCommand(
+                    names: report.updates.map(\.name)
+                )
                 UpgradeActionRow(
                     title: MonitorText.ComponentUpdate.skillUpgradeTitle(
                         report.updates.count
                     ),
                     detail: nil,
-                    primaryLabel: "用 Terminal 升级",
-                    primaryCommand: CLIInstallGuide.mcpRepairCommand,
-                    fallbackLabel: "复制精确命令",
-                    fallbackCommand: CLIInstallGuide.skillUpgradeCommand(
-                        names: report.updates.map(\.name)
-                    )
+                    primaryLabel: MonitorText.ComponentUpdate.openTerminalUpgrade,
+                    primaryCommand: skillCommand,
+                    fallbackLabel: MonitorText.ComponentUpdate.copyUpgradeCommand,
+                    fallbackCommand: skillCommand,
+                    expectation: MonitorText.ComponentUpdate.upgradeExpectSkill,
+                    onCommandUsed: onUpgradeCommandUsed
                 )
             }
         }
@@ -183,7 +187,8 @@ struct ComponentUpdateCardView: View {
             Text(MonitorText.ComponentUpdate.mcpSectionCaption)
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
-            ForEach(mcpFindings) { finding in
+            let listed = McpVersionFinding.sortedForDisplay(mcpFindings)
+            ForEach(listed) { finding in
                 mcpRow(finding)
             }
             ForEach(
@@ -201,7 +206,8 @@ struct ComponentUpdateCardView: View {
                         primaryLabel: MonitorText.ComponentUpdate.copyRetargetNvm,
                         primaryCommand: command,
                         expectation: MonitorText.ComponentUpdate
-                            .upgradeExpectRetargetNvm
+                            .upgradeExpectRetargetNvm,
+                        onCommandUsed: onUpgradeCommandUsed
                     )
                 }
             }
@@ -218,7 +224,8 @@ struct ComponentUpdateCardView: View {
                     primaryCommand: script,
                     fallbackLabel: MonitorText.ComponentUpdate.copyAllUpgradeCommands,
                     fallbackCommand: script,
-                    expectation: MonitorText.ComponentUpdate.upgradeExpectBulk
+                    expectation: MonitorText.ComponentUpdate.upgradeExpectBulk,
+                    onCommandUsed: onUpgradeCommandUsed
                 )
             }
         }
@@ -273,7 +280,10 @@ struct ComponentUpdateCardView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if finding.isUpgradable {
-                McpUpgradeCommandRow(finding: finding)
+                McpUpgradeCommandRow(
+                    finding: finding,
+                    onCommandUsed: onUpgradeCommandUsed
+                )
             }
         }
     }

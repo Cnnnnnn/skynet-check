@@ -7,6 +7,7 @@ import SwiftUI
 // a last-resort fallback for unresolved packages.
 struct McpUpgradeCommandRow: View {
     let finding: McpVersionFinding
+    var onCommandUsed: (() -> Void)?
 
     @State private var commandCopied = false
 
@@ -16,6 +17,7 @@ struct McpUpgradeCommandRow: View {
                 HStack(spacing: 8) {
                     Button(MonitorText.ComponentUpdate.openTerminalUpgrade) {
                         copyToPasteboard(command)
+                        onCommandUsed?()
                         NSWorkspace.shared.open(
                             URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")
                         )
@@ -30,6 +32,7 @@ struct McpUpgradeCommandRow: View {
                     ) {
                         copyToPasteboard(command)
                         commandCopied = true
+                        onCommandUsed?()
                     }
                     .buttonStyle(.borderless)
                     .font(.caption)

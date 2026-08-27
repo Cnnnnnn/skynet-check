@@ -10,6 +10,7 @@ struct UpgradeActionRow: View {
     var fallbackLabel: String?
     var fallbackCommand: String?
     var expectation: String?
+    var onCommandUsed: (() -> Void)?
 
     @State private var commandCopied = false
 
@@ -31,6 +32,7 @@ struct UpgradeActionRow: View {
             HStack(spacing: 8) {
                 Button(primaryLabel) {
                     copyToPasteboard(primaryCommand)
+                    onCommandUsed?()
                     NSWorkspace.shared.open(
                         URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")
                     )
@@ -42,6 +44,7 @@ struct UpgradeActionRow: View {
                     Button(commandCopied ? "命令已复制" : fallbackLabel) {
                         copyToPasteboard(fallbackCommand)
                         commandCopied = true
+                        onCommandUsed?()
                     }
                     .buttonStyle(.borderless)
                     .font(.caption)
@@ -72,6 +75,10 @@ struct EnvironmentCardView: View {
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
             VStack(alignment: .leading, spacing: 7) {
+                Text(MonitorText.Environment.scopeCaption)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
                 ForEach(
                     Array(report.checks.enumerated()),
                     id: \.offset

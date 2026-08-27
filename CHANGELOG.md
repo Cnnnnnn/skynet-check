@@ -5,6 +5,28 @@ follow the newest `v*` git tag; the build number is the commit count.
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-08-27
+
+### Fixed
+
+- Skill “Terminal 升级” now pastes `skynet skill install …@latest` instead
+  of the unrelated `skynet update tools`.
+
+### Added
+
+- After copying or opening an upgrade/retarget command, the next time the
+  menu bar panel opens it rechecks component versions automatically.
+
+### Changed
+
+- Component MCP rows list upgradable and nvm-mismatch entries first so
+  actionable items are not buried under “已是最新”.
+- Environment diagnosis card states its lens up front: CLI / team lock,
+  versus the component card’s IDE config + platform latest.
+- When an IDE MCP binary path is missing but the login-shell nvm node is
+  known, the upgrade command installs into that PATH node and rewrites
+  the frozen config path in one paste.
+
 ## [0.9.1] - 2026-08-27
 
 ### Fixed
