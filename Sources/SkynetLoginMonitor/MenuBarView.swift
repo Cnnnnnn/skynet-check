@@ -220,10 +220,12 @@ struct MenuBarView: View {
             }
         }
         .onPreferenceChange(PanelContentHeightKey.self) { height in
-            guard height > 0, abs(height - contentHeight) > 0.5 else {
-                return
+            Task { @MainActor in
+                guard height > 0, abs(height - contentHeight) > 0.5 else {
+                    return
+                }
+                contentHeight = height
             }
-            contentHeight = height
         }
         .frame(width: 320)
         .frame(height: panelViewportHeight)
